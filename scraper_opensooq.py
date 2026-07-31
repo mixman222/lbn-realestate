@@ -1,14 +1,28 @@
 """
-زاحف عقارات لبنان من السوق المفتوح (OpenSooq Lebanon)
-يجمع: السعر، المساحة، الغرف، المدينة، المنطقة، تاريخ النشر
-ويخزن في SQLite — لبناء تحليل اتجاهات أسعار العقارات اللبنانية.
+زاحف عقارات لبنان من السوق المفتوح (OpenSooq Lebanon) — الإصدار 2
+يستخرج البيانات المرتبة من __NEXT_DATA__ (JSON مدمج بالصفحة) بدل تحليل HTML:
+- أسعار نظيفة بالليرة + تحويل رسمي 15000
+- اسم البائع + رقم الهاتف (مقنّع) + رابط الإعلان
+- المساحة، الغرف، الحي، المدينة، الوصف، تاريخ النشر
+- دعم pagination (?page=N) حسب meta.pages
 """
 import sys, re, time, sqlite3, json, os
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 
+sys.stdout.reconfigure(encoding='utf-8')
+
 BASE = "https://lb.opensooq.com"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+}
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "realestate.db")
+
+# سعر الصرف الرسمي — السوق المفتوح يعرض الليرة بسعر 15000 (تأكدنا: الإعلان يقول USD 315,000 ↔ 4.7B LBP)
+LBP_TO_USD = float(os.environ.get("LBP_TO_USD", "15000"))
+
 LISTING_URLS = [
     "/en/property/property-for-sale",
     "/en/property/apartments-for-sale",
@@ -25,7 +39,6 @@ LISTING_URLS = [
     "/en/property/factory-for-sale",
 ]
 
-# صفحات المدن اللبنانية — كل مدينة صفحتها الخاصة (إعلانات مختلفة)
 CITY_URLS = [
     "/en/beirut/property/property-for-sale",
     "/en/tripoli/property/property-for-sale",
@@ -56,9 +69,7 @@ CITY_URLS = [
     "/en/south-governorate/property/property-for-sale",
 ]
 
-# أحياء المدن الكبرى — كل حي له صفحة إعلانات مستقلة
 NEIGHBORHOOD_URLS = [
-    # بيروت
     "/en/beirut/achrafieh/property/property-for-sale",
     "/en/beirut/ras-beirut/property/property-for-sale",
     "/en/beirut/hamra/property/property-for-sale",
@@ -72,7 +83,6 @@ NEIGHBORHOOD_URLS = [
     "/en/beirut/sin-el-fil/property/property-for-sale",
     "/en/beirut/badaro/property/property-for-sale",
     "/en/beirut/hazmieh/property/property-for-sale",
-    # المتن
     "/en/matn/antelias/property/property-for-sale",
     "/en/matn/jdeideh/property/property-for-sale",
     "/en/matn/bikfaya/property/property-for-sale",
@@ -81,112 +91,127 @@ NEIGHBORHOOD_URLS = [
     "/en/matn/rabieh/property/property-for-sale",
     "/en/matn/bourj-hammoud/property/property-for-sale",
     "/en/matn/naqqache/property/property-for-sale",
-    # كسروان
     "/en/kesrouane/ghazir/property/property-for-sale",
     "/en/kesrouane/ajaltoun/property/property-for-sale",
     "/en/kesrouane/bzommar/property/property-for-sale",
     "/en/kesrouane/adonis/property/property-for-sale",
-    # جبيل
     "/en/jbeil/fidar/property/property-for-sale",
     "/en/jbeil/amchit/property/property-for-sale",
     "/en/jbeil/jbeil-city/property/property-for-sale",
-    # الشوف
     "/en/chouf/beiteddine/property/property-for-sale",
     "/en/chouf/deir-el-qamar/property/property-for-sale",
-    # عاليه
     "/en/aley/aley-city/property/property-for-sale",
     "/en/aley/ain-w-zain/property/property-for-sale",
     "/en/aley/soufar/property/property-for-sale",
 ]
 
-def main():
-    conn = init_db()
-    total = 0
-    for u in LISTING_URLS + CITY_URLS + NEIGHBORHOOD_URLS:
-        n = scrape_listing_page(u, conn)
-        if n:
-            total += n
-            print(f"{u}: +{n}")
-        time.sleep(0.7)
-    count = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
-    print(f"TOTAL: {total} new / {count} in DB")
-    conn.close()
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
-    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
-}
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "realestate.db")
-
-# سعر الصرف: السوق المفتوح اللبناني يعرض الأسعار بالليرة بسعر الصرف الرسمي (15000)
-# بدل السوق السوداء — تبعاً للإعلانات: شقة فيدار 170م² ببحر جبيل = 315K$ بحدود المعقول
-LBP_TO_USD = float(os.environ.get("LBP_TO_USD", "15000"))
-# قائمة المدن اللبنانية الشهيرة
-KNOWN_CITIES = {
-    "beirut", "tripoli", "sidon", "zahle", "tyre", "nabatieh", "jbeil", "byblos",
-    "matn", "baabda", "aley", "kesrouane", "jounieh", "chouf", "akkar", "hermel",
-    "baalbek", "batroun", "bcharre", "bint jbeil", "danniyeh", "jezzine", "koura",
-    "marjaayoun", "rachaiya", "zgharta", "halba", "antelias", "jaz", "amchit",
-    "jdeideh", "fidar", "ghazir", "bikfaya", "dhour", "mzaar", "feytroun",
+TYPE_AR = {
+    "apartments": "شقة", "houses": "منزل", "villas": "فيلا", "lands": "أرض",
+    "commercial": "تجاري", "residential": "سكني", "farm": "مزرعة",
+    "building": "مبنى", "warehouse": "مستودع", "shop": "محل", "office": "مكتب",
+    "factory": "مصنع",
 }
 
-def get_soup(url):
+def get_next_data(url):
+    """يجلب __NEXT_DATA__ من صفحة (يدعم ?page=N)"""
     try:
-        r = requests.get(url, headers=HEADERS, timeout=25)
+        r = requests.get(BASE + url, headers=HEADERS, timeout=25)
         if r.status_code != 200:
-            return None
-        return BeautifulSoup(r.text, "lxml")
+            return None, None
+        m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', r.text, re.S)
+        if not m:
+            return None, None
+        return json.loads(m.group(1)), r.status_code
     except Exception:
-        return None
-
-def parse_price(text):
-    """يستخرج السعر من نص مثل '4,725,789,825 LBP' -> (قيمة، عملة)"""
-    m = re.search(r"([\d,]+\.?\d*)\s*(LBP|USD|\$)", text)
-    if not m:
         return None, None
-    val = float(m.group(1).replace(",", ""))
-    cur = "USD" if m.group(2) in ("USD", "$") else "LBP"
-    return val, cur
 
-def parse_area(text):
-    m = re.search(r"Area:\s*([\d,]+)\s*m2", text)
-    return float(m.group(1).replace(",", "")) if m else None
+def parse_items(data):
+    """يستخرج الإعلانات المرتبة + meta الترحيل"""
+    try:
+        serp = data['props']['pageProps']['serpApiResponse']
+        items = serp['listings']['items']
+        meta = serp['listings']['meta']
+        return items, meta
+    except Exception:
+        return [], {}
 
-def parse_rooms(text):
-    m = re.search(r"(\d+)\s*(?:Bedrooms|bedroom)", text, re.I)
-    return int(m.group(1)) if m else None
-
-def parse_location(text):
-    """يستخرج المنطقة والمدينة مثل 'Fidar, Jbeil'"""
-    m = re.search(r"\|\s*([A-Za-z\s]+),?\s*([A-Za-z\s]+?)\s*\|\s*(?:Apartments|Villas|Houses|Lands|Commercial|Residential|Farm|Building|Warehouse|Shop|Office|Factory)",
-                  text)
+def extract_fields(it):
+    """يحوّل عنصر JSON إلى حقول قاعدة البيانات"""
+    price_lbp, price_usd, cur = None, None, None
+    pa = (it.get('price_amount') or '').strip()
+    m = re.match(r'^([\d,]+\.?\d*)\s*(LBP|USD|\$)$', pa)
     if m:
-        loc = m.group(1).strip()
-        city = m.group(2).strip() if m.group(2) else ""
-        return loc, city
-    return None, None
+        val = float(m.group(1).replace(',', ''))
+        cur = "USD" if m.group(2) in ("USD", "$") else "LBP"
+        price_lbp = val if cur == "LBP" else val * LBP_TO_USD
+        price_usd = val if cur == "USD" else val / LBP_TO_USD
 
-def parse_date(text):
-    m = re.search(r"(\d{2}-\d{2}-\d{4})", text)
-    if m:
-        return m.group(1)
-    m2 = re.search(r"(\d+)\s+(hour|hours|day|days|week|month)\s+ago", text, re.I)
-    if m2:
-        n = int(m2.group(1)); unit = m2.group(2).lower()
-        hours = {"hour": 1, "hours": 1, "day": 24, "days": 24, "week": 168, "month": 720}
-        return (datetime.now().replace(microsecond=0) -
-                __import__("datetime").timedelta(hours=n * hours[unit])).strftime("%d-%m-%Y")
-    return None
+    area = rooms = None
+    cps = it.get('cps') or []
+    for c in cps:
+        cm = re.search(r'Area:\s*([\d,]+)\s*m2', c)
+        if cm:
+            area = float(cm.group(1).replace(',', ''))
+            continue
+        rm = re.search(r'(\d+)\s*Bedrooms?', c)
+        if rm:
+            rooms = int(rm.group(1))
+    if area is None:
+        hm = re.search(r'([\d,]+)\s*m2', it.get('highlights') or '')
+        if hm:
+            area = float(hm.group(1).replace(',', ''))
+    if rooms is None:
+        hm = re.search(r'(\d+)\s*Bedrooms?', it.get('highlights') or '')
+        if hm:
+            rooms = int(hm.group(1))
 
-def parse_type(text):
-    m = re.search(r"\|\s*([A-Za-z\s]+?)\s*(?:for\s*Sale)?\s*\|", text)
-    if m:
-        t = m.group(1).strip().lower()
-        mapping = {"apartments": "شقة", "houses": "منزل", "villas": "فيلا",
-                   "lands": "أرض", "commercial": "تجاري", "residential": "سكني",
-                   "farm": "مزرعة", "building": "مبنى", "warehouse": "مستودع",
-                   "shop": "محل", "office": "مكتب", "factory": "مصنع"}
-        return mapping.get(t, t)
-    return None
+    posted = None
+    pd_ = it.get('inserted_date')
+    if pd_:
+        posted = pd_
+    else:
+        pa2 = it.get('posted_at')
+        mrel = re.search(r'(\d+)\s+(hour|day|week|month|minute)s?\s+ago', (pa2 or ''), re.I)
+        if mrel:
+            n = int(mrel.group(1)); u = mrel.group(2).lower()
+            hours = {"minute": 1/60, "hour": 1, "day": 24, "week": 168, "month": 720}
+            posted = (datetime.now().replace(microsecond=0) -
+                      datetime.timedelta(hours=n * hours[u])).strftime("%d-%m-%Y")
+
+    # النوع من cat2_uri أو cat2_label
+    cat2 = it.get('cat2_uri') or it.get('cat2_label') or ''
+    ptype = None
+    for en, ar in TYPE_AR.items():
+        if en in cat2.lower():
+            ptype = ar
+            break
+    if ptype is None and it.get('cat1_label'):
+        ptype = it['cat1_label']
+
+    return {
+        'ad_id': it.get('id'),
+        'url': it.get('post_url') or f"/en/search/{it.get('id')}",
+        'title': (it.get('title') or '')[:200],
+        'price_lbp': price_lbp,
+        'price_usd': price_usd,
+        'currency': cur,
+        'area': area,
+        'rooms': rooms,
+        'location': it.get('nhood_label'),
+        'city': it.get('city_label'),
+        'prop_type': ptype,
+        'date_posted': posted,
+        'seller': it.get('member_display_name'),
+        'seller_url': f"/en/members/{it.get('member_user_name')}" if it.get('member_user_name') else None,
+        'phone': it.get('phone_number'),
+        'has_phone': it.get('has_phone'),
+        'reveal_key': it.get('phone_reveal_key'),
+        'description': (it.get('masked_description') or '')[:500],
+        'highlights': it.get('highlights'),
+        'image': (f"https://opensooq-imagesv2.os-cdn.com/previews/700x0/{it['image_uri']}.webp"
+                  if it.get('image_uri') else None),
+        'image_count': it.get('image_count'),
+    }
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -204,64 +229,51 @@ def init_db():
             prop_type TEXT,
             date_posted TEXT,
             first_seen TEXT,
-            last_seen TEXT
+            last_seen TEXT,
+            seller TEXT,
+            seller_url TEXT,
+            phone TEXT,
+            description TEXT,
+            highlights TEXT,
+            image TEXT
         )
     """)
     conn.commit()
     return conn
 
 def scrape_listing_page(url, conn):
-    soup = get_soup(BASE + url)
-    if not soup:
-        return 0
-    cards = soup.find_all("a", href=re.compile(r"/en/search/\d+"))
-    links = [a["href"] for a in cards]
-    links = list(dict.fromkeys(links))  # فك التكرار
+    """يزحف صفحة + كل صفحاتها (?page=N)"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     added = 0
-    for link in links:
-        card_links = [a for a in cards if a["href"] == link]
-        if not card_links:
-            continue
-        card = card_links[0]
-        # نص الإعلان من الرابط نفسه — في المدن كل إعلان رابط مباشر،
-        # وفي الصفحات العامة نبحث عن الحاوية kMfbet إذا النص مش كامل
-        text = card.get_text(" | ", strip=True)
-        if text.count("Area:") == 0:
-            anc = card
-            for _ in range(8):
-                if anc is None: break
-                anc = anc.parent
-                if anc is None: break
-                cls = " ".join(anc.get("class")) if anc.get("class") else ""
-                if "kMfbet" in cls and anc.get_text(" | ", strip=True).count("Area:") == 1:
-                    text = anc.get_text(" | ", strip=True)
-                    break
-        price_lbp, cur = parse_price(text)
-        if not price_lbp:
-            continue
-        # رقم الإعلان الفريد (من الرابط) — مفتاح التكرار
-        ad_id = re.search(r"/en/search/(\d+)", link)
-        ad_key = ad_id.group(1) if ad_id else link
-        url_key = "/en/search/" + ad_key
-        price_usd = price_lbp / LBP_TO_USD if cur == "LBP" else price_lbp
-        area = parse_area(text)
-        rooms = parse_rooms(text)
-        loc, city = parse_location(text)
-        dpost = parse_date(text)
-        ptype = parse_type(text)
-        title = text.split("|")[0].strip() if "|" in text else text[:100]
-        try:
-            conn.execute("""
-                INSERT OR IGNORE INTO listings
-                (url, title, price_lbp, price_usd, area, rooms, location, city, prop_type, date_posted, first_seen, last_seen)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-            """, (url_key, title[:200], price_lbp, round(price_usd, 1), area, rooms,
-                  loc, city, ptype, dpost, now, now))
-            conn.execute("UPDATE listings SET last_seen=? WHERE url=?", (now, url_key))
-            added += 1
-        except Exception:
-            pass
+    page = 1
+    while True:
+        data, _ = get_next_data(url + (f"?page={page}" if page > 1 else ""))
+        items, meta = parse_items(data) if data else ([], {})
+        if not items:
+            break
+        for it in items:
+            f = extract_fields(it)
+            if f['price_lbp'] is None:
+                continue
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO listings
+                    (url, title, price_lbp, price_usd, area, rooms, location, city, prop_type,
+                     date_posted, first_seen, last_seen, seller, seller_url, phone, description, highlights, image)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (f['url'], f['title'], f['price_lbp'], f['price_usd'], f['area'], f['rooms'],
+                      f['location'], f['city'], f['prop_type'], f['date_posted'], now, now,
+                      f['seller'], f['seller_url'], f['phone'], f['description'], f['highlights'], f['image']))
+                conn.execute("UPDATE listings SET last_seen=?, price_lbp=?, price_usd=?, area=?, rooms=?, title=?, seller=?, phone=?, description=?, image=? WHERE url=?",
+                             (now, f['price_lbp'], f['price_usd'], f['area'], f['rooms'], f['title'], f['seller'], f['phone'], f['description'], f['image'], f['url']))
+                added += 1
+            except Exception:
+                pass
+        pages = int(meta.get('pages') or 1) if meta else 1
+        if page >= pages:
+            break
+        page += 1
+        time.sleep(0.4)
     conn.commit()
     return added
 
@@ -273,9 +285,10 @@ def main():
         if n:
             total += n
             print(f"{u}: +{n}")
-        time.sleep(0.7)
+        time.sleep(0.6)
     count = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
-    print(f"TOTAL: {total} new / {count} in DB")
+    distinct = conn.execute("SELECT COUNT(DISTINCT url) FROM listings").fetchone()[0]
+    print(f"TOTAL: {total} updates / {distinct} unique / {count} rows")
     conn.close()
 
 if __name__ == "__main__":

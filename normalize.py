@@ -9,20 +9,21 @@ import pandas as pd
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "realestate.db")
 
-# توحيد أسماء المدن -> الاسم العربي
+# توحيد أسماء المدن -> الاسم العربي (المفاتيح كما يرسلها السوق المفتوح)
 CITY_AR = {
     "beirut": "بيروت", "tripoli": "طرابلس", "sidon": "صيدا", "zahle": "زحلة",
     "tyre": "صور", "nabatieh": "النبطية", "jbeil": "جبيل", "byblos": "جبيل",
     "matn": "المتن", "baabda": "بعبدا", "aley": "عاليه", "kesrouane": "كسروان",
-    "jounieh": "جونية", "chouf": "الشوف", "akkar": "عكار", "hermel": "الهرمل",
-    "baalbek": "بعلبك", "batroun": "البترون", "bcharre": "بشري", "bint jbeil": "بنت جبيل",
-    "danniyeh": "الضنية", "jezzine": "جزين", "koura": "الكورة", "marjaayoun": "مرجعيون",
+    "jounieh": "جونية", "chouf": "الشوف", "akkar": "عكار", "aakkar": "عكار",
+    "hermel": "الهرمل", "baalbek": "بعلبك", "batroun": "البترون", "bcharre": "بشري",
+    "bint jbeil": "بنت جبيل", "bint-jbeil": "بنت جبيل", "danniyeh": "الضنية",
+    "jezzine": "جزين", "koura": "الكورة", "marjaayoun": "مرجعيون",
     "rachaiya": "راشيا", "zgharta": "زغرتا", "west bekaa": "البقاع الغربي",
+    "south governorate": "الجنوب",
 }
 
-# التطبيع الفعلي: تقسيم الـ location/city إلى (قضاء، بلدة)
+# الأحياء -> القضاء (لبنان: المحافظة)
 LOCATION_MAP = {
-    # بلدات -> قضاء
     "achrafieh": "بيروت", "ras beirut": "بيروت", "hamra": "بيروت",
     "solidere": "بيروت", "verdun": "بيروت", "mar elias": "بيروت",
     "tabaris": "بيروت", "saifi": "بيروت", "gemmayze": "بيروت",
@@ -37,6 +38,7 @@ LOCATION_MAP = {
     "halba": "عكار", "abou samra": "طرابلس",
     "broummana": "المتن", "bchamoun": "عاليه",
     "kfarhbab": "المتن", "zalka": "المتن",
+    "jbeil city": "جبيل", "aley city": "عاليه",
 }
 
 def load_listings():
@@ -56,7 +58,7 @@ def normalize(df, lbp_rate=15000.0):
     # توحيد أسماء المدن
     df['city_ar'] = df['city'].astype(str).str.strip().str.lower().map(CITY_AR)
     df['city_ar'] = df['city_ar'].fillna(df['city'].astype(str)).fillna("غير محدد")
-    # القضاء من الموقع
+    # القضاء من الموقع (الحي)
     df['governorate'] = df['location'].astype(str).str.strip().str.lower().map(LOCATION_MAP)
     df['governorate'] = df['governorate'].fillna(df['city_ar']).fillna("غير محدد")
     # تصفية القيم الشاذة: سعر المتر² خارج [50, 20000] يعتبر خطأ

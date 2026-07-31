@@ -1,86 +1,115 @@
 """
-موقع اتجاهات أسعار العقارات في لبنان
-- صفحة رئيسية: ملخص السوق + اتجاهات
-- صفحة الشقق: بحث وفلترة
-- صفحة التحليلات: تفصيل بالأقضية
-- صفحة الاشتراك: نموذج جمع مشتركين
+عقار لبنان — اتجاهات أسعار السوق
+داشبورد: ملخص السوق، اتجاهات الأقضية، بحث وفلترة بالصور والتواصل، اشتراك.
 """
 import os, sys, sqlite3
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from normalize import load_listings, normalize
 
 st.set_page_config(page_title="عقار لبنان — اتجاهات الأسعار", layout="wide", page_icon="🏠")
 
-# اتجاه RTL
 st.markdown("""
 <style>
     .stApp { direction: rtl; }
-    .block-container { padding-top: 1.5rem; }
+    .block-container { padding-top: 1.2rem; max-width: 1200px; }
+    h1, h2, h3 { font-family: 'Segoe UI', Tahoma, sans-serif; }
+    .kpi-card { background: linear-gradient(135deg, #1f6f8b 0%, #2a9d8f 100%);
+                border-radius: 16px; padding: 18px 20px; color: white; margin-bottom: 8px; }
+    .kpi-card .lbl { font-size: 0.85rem; opacity: 0.85; }
+    .kpi-card .val { font-size: 1.7rem; font-weight: 700; }
+    .list-card { background: white; border: 1px solid #e5e7eb; border-radius: 14px;
+                 padding: 12px; margin-bottom: 10px; }
+    .price-big { color: #1f6f8b; font-weight: 800; font-size: 1.15rem; }
+    .tag { background: #eef4f6; color: #1f6f8b; border-radius: 8px; padding: 2px 10px;
+           font-size: 0.78rem; display: inline-block; margin-left: 4px; }
+    .muted { color: #6b7280; font-size: 0.8rem; }
+    .phone-chip { background: #e8f5e9; color: #2e7d32; border-radius: 8px; padding: 2px 10px;
+                  font-size: 0.85rem; direction: ltr; display: inline-block; }
+    .cta-btn { background: #1f6f8b; color: white; border-radius: 10px; padding: 6px 14px;
+               text-decoration: none; font-size: 0.85rem; }
+    .hero { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            color: white; border-radius: 18px; padding: 26px 30px; margin-bottom: 18px; }
+    .hero h1 { color: white; margin: 0 0 6px 0; }
+    .hero p { color: #cfe3ea; margin: 0; font-size: 0.95rem; }
+    div[data-testid="stImage"] img { border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
-# سعر الصرف قابل للتعديل من الشريط الجانبي
 lbp_rate = st.sidebar.number_input("سعر صرف الليرة للدولار", min_value=10000.0, max_value=150000.0,
-                                   value=15000.0, step=1000.0, help="السوق المفتوح يعرض بالليرة — نحولها للدولار")
+                                   value=15000.0, step=1000.0,
+                                   help="السوق المفتوح يعرض بالليرة بسعر رسمي 15000 — نعرضها بالدولار")
 
 @st.cache_data(ttl=3600)
 def load_data():
-    df = load_listings()
-    return normalize(df)
+    return normalize(load_listings())
 
 df = load_data()
-
-st.title("🏠 عقار لبنان — اتجاهات أسعار السوق")
-st.caption(f"بيانات حية من إعلانات السوق المفتوح — {len(df)} إعلان • آخر تحديث: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
 
 if df.empty:
     st.warning("لا توجد بيانات بعد — شغّل الزاحف أولاً: python scraper_opensooq.py")
     st.stop()
 
-# ---------- KPIs ----------
+# ---------- الهيرو ----------
+st.markdown("""
+<div class="hero">
+  <h1>🏠 عقار لبنان — اتجاهات أسعار السوق</h1>
+  <p>متابعة يومية لإعلانات السوق المفتوح: متوسطات الأسعار، سعر المتر²، وأحدث العروض —
+     بالدولار (سعر الصرف الرسمي). مجاني وبلا تسجيل.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ---------- البطاقات ----------
 c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.metric("📊 إعلانات مراقبة", f"{len(df)}")
-with c2:
-    st.metric("🏘️ أقضية مغطاة", f"{df['governorate'].nunique()}")
-with c3:
-    st.metric("💵 متوسط سعر المتر²", f"{df['price_per_m2'].median():,.0f}$")
-with c4:
-    st.metric("🏠 متوسط سعر العقار", f"{df['price_usd'].median():,.0f}$")
+cards = [
+    ("📊 إعلانات مراقبة", f"{len(df):,}"),
+    ("🏘️ أقضية مغطاة", f"{df['governorate'].nunique()}"),
+    ("💵 متوسط سعر المتر²", f"{df['price_per_m2'].median():,.0f}$"),
+    ("🏠 متوسط سعر العقار", f"{df['price_usd'].median():,.0f}$"),
+]
+for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
+    with col:
+        st.markdown(f'<div class="kpi-card"><div class="lbl">{lbl}</div>'
+                    f'<div class="val">{val}</div></div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ---------- متوسط سعر المتر² حسب القضاء ----------
+# ---------- اتجاهات السعر ----------
 st.subheader("📈 متوسط سعر المتر² حسب القضاء")
 g = (df.groupby('governorate')
-       .agg(متوسط_سعر_المتر=('price_per_m2', 'median'),
-            عدد_الإعلانات=('id', 'count'))
-       .reset_index()
-       .sort_values('متوسط_سعر_المتر', ascending=True))
-fig = px.bar(g, x='متوسط_سعر_المتر', y='governorate', orientation='h',
-             text_auto='.0f', color='متوسط_سعر_المتر', color_continuous_scale='viridis')
-fig.update_layout(height=500, xaxis_title="دولار/م²", yaxis_title="", showlegend=False,
-                  margin=dict(l=10, r=10, t=30, b=10))
+       .agg(متوسط=('price_per_m2', 'median'), عدد=('id', 'count'))
+       .reset_index().sort_values('متوسط'))
+fig = go.Figure(go.Bar(
+    x=g['متوسط'], y=g['governorate'], orientation='h',
+    text=[f"{v:,.0f}$" for v in g['متوسط']], textposition='outside',
+    marker=dict(color=g['متوسط'], colorscale='Tealgrn'),
+))
+fig.update_layout(height=480, margin=dict(l=10, r=60, t=10, b=10),
+                  xaxis_title="دولار/م²", yaxis_title="", showlegend=False,
+                  font=dict(size=13))
 st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
 
-# ---------- الشقق: بحث وفلترة ----------
-st.subheader("🔍 أحدث الشقق المعروضة")
-col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-with col_f1:
-    govs = ["الكل"] + sorted(df['governorate'].unique().tolist())
+# ---------- البحث والفلترة ----------
+st.subheader("🔍 الإعلانات")
+f1, f2, f3, f4, f5 = st.columns(5)
+with f1:
+    govs = ["الكل"] + sorted(df['governorate'].dropna().unique().tolist())
     sel_gov = st.selectbox("القضاء", govs)
-with col_f2:
+with f2:
     types = ["الكل"] + sorted(df['prop_type'].dropna().unique().tolist())
     sel_type = st.selectbox("نوع العقار", types)
-with col_f3:
-    max_price = st.number_input("الحد الأقصى للسعر ($)", min_value=0, value=0, step=50000)
-with col_f4:
+with f3:
+    rooms_opts = ["الكل", "1+", "2+", "3+"]
+    sel_rooms = st.selectbox("الغرف", rooms_opts)
+with f4:
+    max_price = st.number_input("الحد الأقصى ($)", min_value=0, value=0, step=50000)
+with f5:
     sort_by = st.selectbox("ترتيب", ["الأحدث", "السعر من الأقل", "السعر من الأعلى", "أقل سعر للمتر"])
 
 f = df.copy()
@@ -88,6 +117,9 @@ if sel_gov != "الكل":
     f = f[f['governorate'] == sel_gov]
 if sel_type != "الكل":
     f = f[f['prop_type'] == sel_type]
+if sel_rooms != "الكل":
+    need = int(sel_rooms[0])
+    f = f[f['rooms'].notna() & (f['rooms'] >= need)]
 if max_price > 0:
     f = f[f['price_usd'] <= max_price]
 
@@ -100,27 +132,52 @@ elif sort_by == "السعر من الأعلى":
 else:
     f = f.sort_values('price_per_m2')
 
-for _, r in f.head(20).iterrows():
-    loc = f"{r['location']}، {r['city_ar']}" if pd.notna(r['location']) else r['city_ar']
-    t = f"{r['title']}"
-    if pd.notna(r['area']): t += f" • {r['area']:.0f} م²"
-    if pd.notna(r['rooms']): t += f" • {r['rooms']:.0f} غرف"
+st.caption(f"عرض {min(len(f), 30)} من {len(f):,} إعلان")
+
+for _, r in f.head(30).iterrows():
+    loc = f"{r['location']}، {r['city_ar']}" if pd.notna(r['location']) and str(r['location']).strip() else r['city_ar']
+    tags = [r['prop_type'] or '', f"{r['area']:.0f} م²" if pd.notna(r['area']) else '']
+    if pd.notna(r['rooms']):
+        tags.append(f"{r['rooms']:.0f} غرف")
+    tags = [t for t in tags if t]
+    tags_html = "".join(f'<span class="tag">{t}</span>' for t in tags)
+    desc = (str(r['description'])[:160] + "…") if pd.notna(r['description']) and len(str(r['description'])) > 160 else (str(r['description']) if pd.notna(r['description']) else "")
+    seller = r['seller'] if pd.notna(r['seller']) and str(r['seller']).strip() else ""
+    phone = r['phone'] if pd.notna(r['phone']) else ""
+    img = r['image'] if pd.notna(r['image']) else None
+
     with st.container(border=True):
-        cL, cR = st.columns([3, 1])
-        with cL:
-            st.markdown(f"**{t}**")
-            st.caption(f"📍 {loc} • {r['prop_type'] or ''} • {r['date_posted'].strftime('%d/%m/%Y') if pd.notna(r['date_posted']) else ''}")
-        with cR:
-            st.markdown(f"### {r['price_usd']:,.0f}$")
+        col_img, col_txt, col_price = st.columns([1, 2.4, 1])
+        with col_img:
+            if img and str(img).startswith("http"):
+                try:
+                    st.image(str(img), use_container_width=True)
+                except Exception:
+                    pass
+        with col_txt:
+            st.markdown(f"**{r['title']}**")
+            st.markdown(f"📍 {loc} &nbsp;·&nbsp; {tags_html}", unsafe_allow_html=True)
+            if desc:
+                st.markdown(f'<div class="muted">{desc}</div>', unsafe_allow_html=True)
+            info = []
+            if seller:
+                info.append(f"👤 {seller}")
+            if phone:
+                info.append(f'<span class="phone-chip">📞 {phone}</span>')
+            if pd.notna(r['date_posted']):
+                info.append(f"🗓 {r['date_posted'].strftime('%d/%m/%Y')}")
+            st.markdown(" &nbsp; ".join(info), unsafe_allow_html=True)
+            st.markdown(f'<a class="cta-btn" href="https://lb.opensooq.com{r["url"]}" target="_blank">عرض الإعلان كاملاً — كشف رقم الهاتف</a>',
+                        unsafe_allow_html=True)
+        with col_price:
+            st.markdown(f'<div class="price-big">{r["price_usd"]:,.0f}$</div>', unsafe_allow_html=True)
             if pd.notna(r['area']) and r['area'] > 0:
-                st.caption(f"{r['price_per_m2']:,.0f}$/م²")
+                st.markdown(f'<div class="muted">{r["price_per_m2"]:,.0f}$/م²</div>', unsafe_allow_html=True)
 
 st.markdown("---")
-st.caption("⚠️ الأسعار تقريبية مبنية على إعلانات السوق المفتوح — للتوجيه فقط، وليست تقييماً مهنياً.")
 
 # ---------- الاشتراك ----------
-st.markdown("---")
-st.subheader("📧 ابقَ على اطلاع — تقرير أسبوعي مجاني")
+st.subheader("📧 تقرير أسبوعي مجاني")
 st.caption("سلمك تقريراً أسبوعياً: متوسطات الأسعار، الاتجاهات، وأبرز العروض — بدون رسائل مزعجة.")
 
 with st.form("subscribe_form", clear_on_submit=True):
@@ -143,3 +200,7 @@ if submitted:
         conn.close()
     else:
         st.error("يرجى إدخال بريد إلكتروني صحيح.")
+
+st.markdown("---")
+st.caption("⚠️ الأسعار تقريبية مبنية على إعلانات السوق المفتوح — للتوجيه فقط، وليست تقييماً مهنياً. "
+           "الأرقام الهاتفية مقنّعة؛ رقمك الكامل من صفحة الإعلان الرسمية.")
