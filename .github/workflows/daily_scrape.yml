@@ -31,3 +31,4 @@ jobs:
           git add -A
           git diff --quiet && git diff --cached --quiet || git commit -m "Daily scrape: $(date +'%Y-%m-%d')"
           git push
+
