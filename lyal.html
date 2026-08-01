@@ -3,153 +3,130 @@
 <head>
 <meta charset="utf-8">
 <style>
-html, body { margin:0; padding:0; background:transparent; overflow:hidden;
-  font-family:'Segoe UI', Tahoma, sans-serif; }
-#stage { position:fixed; left:6px; bottom:6px; width:260px; height:340px; z-index:99999; }
-#stage canvas { border-radius: 16px; }
-#bubble { position:fixed; left:14px; bottom:352px; width:252px; max-height:150px; overflow:auto;
-  background:#fff8e6; border:1.5px solid #f4a261; border-radius:14px; padding:10px 12px;
-  color:#5d4037; font-size:.9rem; z-index:99999; box-shadow:0 6px 18px rgba(0,0,0,.15);
-  line-height:1.55; }
-#name { position:fixed; left:22px; bottom:318px; z-index:99999;
-  background:linear-gradient(135deg,#e91e63,#ad1457); color:#fff; border-radius:20px;
-  padding:3px 12px; font-size:.8rem; font-weight:700; box-shadow:0 3px 8px rgba(0,0,0,.2); }
-#hint { position:fixed; left:16px; bottom:298px; z-index:99999; font-size:.68rem;
-  color:#b7791f; width:250px; }
+html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
+#wrap { position:fixed; left:16px; bottom:14px; z-index:99999;
+  perspective: 600px; pointer-events:none; }
+#card { width:190px; height:190px; border-radius:50%;
+  background: radial-gradient(circle at 30% 25%, #ff9a9e, #fad0c4 45%, #a18cd1 100%);
+  padding:5px; box-shadow: 0 10px 34px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.25);
+  transform-style: preserve-3d; animation: floaty 4s ease-in-out infinite;
+  position:relative; }
+#card img { width:100%; height:100%; border-radius:50%; object-fit:cover; display:block;
+  border:3px solid #fff; }
+#ring { position:absolute; inset:-8px; border-radius:50%;
+  border:3px solid rgba(233,30,99,.55); animation: pulse 2.2s ease-in-out infinite; }
+#name { margin-top:10px; text-align:center; color:#fff; font-family:'Segoe UI',Tahoma,sans-serif;
+  font-size:.85rem; font-weight:700; background:rgba(173,20,87,.92); border-radius:20px;
+  padding:4px 14px; display:inline-block; box-shadow:0 4px 12px rgba(0,0,0,.25); }
+.center { text-align:center; }
+.speaking #card { animation: talk 0.4s ease-in-out infinite alternate, floaty 4s ease-in-out infinite; }
+@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes talk { from { transform: scale(1); } to { transform: scale(1.04); } }
+@keyframes pulse { 0%,100% { transform: scale(1); opacity:.9; }
+  50% { transform: scale(1.07); opacity:.45; } }
 </style>
 </head>
 <body>
-<div id="bubble">__MSG__</div>
-<div id="name">🦸‍♀️ ليال — مساعدتك العقارية</div>
-<div id="hint">🎙️ بتتكلّم باللبناني — فعّل الأصوات العربية بجهازك</div>
-<div id="stage"></div>
-<script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-"three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
-</script>
-<script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+<div id="wrap">
+  <div id="card">
+    <div id="ring"></div>
+    <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80" alt="ليال">
+  </div>
+  <div class="center"><div id="name">ليال 🦸‍♀️</div></div>
+</div>
+<script>
+(function(){
+  var wrap = document.getElementById('wrap');
+  var card = document.getElementById('card');
 
-const bubble = document.getElementById('bubble');
-
-// ---------- المشهد ثلاثي الأبعاد ----------
-const STAGE = document.getElementById('stage');
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(40, 260/340, 0.1, 50);
-camera.position.set(0, 0.85, 2.4);
-camera.lookAt(0, 0.85, 0);
-const renderer = new THREE.WebGLRenderer({ alpha:true, antialias:true });
-renderer.setSize(260, 340);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-STAGE.appendChild(renderer.domElement);
-
-scene.add(new THREE.AmbientLight(0xffffff, 1.15));
-const dl = new THREE.DirectionalLight(0xffffff, 0.9);
-dl.position.set(1, 2, 1.5);
-scene.add(dl);
-
-const grp = new THREE.Group();
-let mixer = null;
-const loader = new GLTFLoader();
-const MODEL = 'https://cdn.jsdelivr.net/gh/mixman222/lbn-realestate@master/models/xbot.glb';
-
-function onModel(g){
-  grp.add(g.scene);
-  scene.add(grp);
-  if (g.animations && g.animations.length) {
-    mixer = new THREE.AnimationMixer(g.scene);
-    const names = g.animations.map(a => a.name);
-    const pick = names.indexOf('Idle') >= 0 ? 'Idle'
-               : (names.indexOf('Wave') >= 0 ? 'Wave' : g.animations[0].name);
-    const clip = THREE.AnimationClip.findByName(g, pick) || g.animations[0];
-    mixer.clipAction(clip).play();
+  // ---------- إطالة الـ iframe ليعوم على يسار الشاشة ----------
+  function fixFrame(){
+    if (window.frameElement) {
+      var f = window.frameElement;
+      f.style.position = 'fixed';
+      f.style.left = '0px';
+      f.style.bottom = '0px';
+      f.style.width = '230px';
+      f.style.height = '260px';
+      f.style.zIndex = '99998';
+      f.style.border = 'none';
+      f.style.background = 'transparent';
+      f.style.pointerEvents = 'none';
+    }
   }
-}
+  fixFrame();
+  setInterval(fixFrame, 300);
 
-function loadModel(){
-  loader.load(MODEL, onModel);
-}
-if ('caches' in window) {
-  caches.open('lyal_cache').then(function(c){
-    c.match(MODEL).then(function(res){
-      if (res) { res.arrayBuffer().then(function(buf){ loader.parse(buf, '', onModel); }); }
-      else {
-        fetch(MODEL).then(function(r){
-          c.put(MODEL, r.clone());
-          return r.arrayBuffer();
-        }).then(function(buf){ loader.parse(buf, '', onModel); })
-        .catch(loadModel);
+  // ---------- إمالة ثلاثية الأبعاد خفيفة مع حركة الماوس ----------
+  document.addEventListener('mousemove', function(e){
+    try {
+      var r = wrap.getBoundingClientRect();
+      var cx = r.left + r.width/2, cy = r.top + r.height/2;
+      var dx = (e.clientX - cx) / 40, dy = (e.clientY - cy) / 40;
+      card.style.transform = 'rotateY(' + (-dx) + 'deg) rotateX(' + dy + 'deg)';
+    } catch(err) {}
+  });
+  document.addEventListener('mouseleave', function(){ card.style.transform = ''; });
+
+  // ---------- الصوت: أنثى عربية عبر Google TTS، مع احتياط المتصفح ----------
+  var audio = new Audio();
+  var pending = null;
+  var speaking = false;
+
+  function setSpeaking(on){
+    speaking = on;
+    card.parentElement.parentElement.classList.toggle('speaking', on);
+  }
+
+  function browserFallback(text){
+    try {
+      var vs = speechSynthesis.getVoices();
+      var v = vs.filter(function(x){ return x.lang && x.lang.indexOf('ar') === 0; })[0];
+      if (!v) return;
+      speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.voice = v; u.lang = v.lang; u.rate = 1.02;
+      u.onstart = function(){ setSpeaking(true); };
+      u.onend = function(){ setSpeaking(false); };
+      speechSynthesis.speak(u);
+    } catch(e) {}
+  }
+
+  function speak(text){
+    try {
+      var last = null;
+      try { last = localStorage.getItem('lyal_last'); } catch(e) {}
+      if (last === text) return;
+      try { localStorage.setItem('lyal_last', text); } catch(e) {}
+      audio.onerror = function(){ setSpeaking(false); browserFallback(text); };
+      audio.onended = function(){ setSpeaking(false); };
+      audio.onplay = function(){ setSpeaking(true); };
+      audio.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ar&q=' +
+                  encodeURIComponent(text);
+      var p = audio.play();
+      if (p && p.catch) {
+        p.catch(function(){ setSpeaking(false); pending = text; });
       }
-    }).catch(loadModel);
-  }).catch(loadModel);
-} else {
-  loadModel();
-}
-
-function tick(t){
-  if (mixer) mixer.update(0.016);
-  grp.position.y = 0 + Math.sin(t*0.002)*0.05;
-  grp.rotation.y = Math.sin(t*0.0006)*0.35;
-  renderer.render(scene, camera);
-  requestAnimationFrame(tick);
-}
-requestAnimationFrame(tick);
-
-// ---------- إطالة الـ iframe ليعوم على يسار الشاشة ----------
-function fixFrame(){
-  if (window.frameElement) {
-    const f = window.frameElement;
-    f.style.position = 'fixed';
-    f.style.left = '4px';
-    f.style.bottom = '4px';
-    f.style.width = '268px';
-    f.style.height = '520px';
-    f.style.zIndex = '99998';
-    f.style.border = 'none';
-    f.style.background = 'transparent';
-    f.style.pointerEvents = 'none';
+    } catch(e) {}
   }
-}
-fixFrame();
-setInterval(fixFrame, 300);
 
-// ---------- النطق باللبناني (بمجرد لكل نص) ----------
-let voice = null;
-function pickVoice(){
-  const vs = speechSynthesis.getVoices();
-  voice = vs.filter(v => v.lang && v.lang.indexOf('ar-LB') === 0)
-            .concat(vs.filter(v => v.lang && v.lang.indexOf('ar') === 0))[0] || null;
-}
-pickVoice();
-speechSynthesis.addEventListener('voiceschanged', pickVoice);
+  // أول نقرة/لمسة بتشغّل الرسالة المعلّقة (المتصفح بمنع الصوت قبل تفاعل)
+  document.addEventListener('click', function once(){
+    if (pending) { var t = pending; pending = null; speak(t); }
+  }, { once:true });
+  document.addEventListener('touchstart', function once(){
+    if (pending) { var t = pending; pending = null; speak(t); }
+  }, { once:true });
 
-function speak(text){
-  try {
-    if (!voice) return;
-    let last = null;
-    try { last = localStorage.getItem('lyal_last'); } catch(e) {}
-    if (last === text) return;
-    try { localStorage.setItem('lyal_last', text); } catch(e) {}
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.voice = voice;
-    u.lang = voice.lang;
-    u.rate = 1.03;
-    speechSynthesis.speak(u);
-  } catch(e) {}
-}
+  // ---------- استقبال الرسائل من التطبيق ----------
+  var ch = new BroadcastChannel('lyal');
+  ch.onmessage = function(ev){
+    if (ev.data && ev.data.msg) speak(ev.data.msg);
+  };
 
-// ---------- استقبال الرسائل من التطبيق ----------
-const ch = new BroadcastChannel('lyal');
-ch.onmessage = function(ev){
-  if (ev.data && ev.data.msg) {
-    bubble.textContent = ev.data.msg;
-    speak(ev.data.msg);
-  }
-};
-
-speak(bubble.textContent);
+  var initial = '__MSG__';
+  if (initial) speak(initial);
+})();
 </script>
 </body>
 </html>
