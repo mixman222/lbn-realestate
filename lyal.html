@@ -29,6 +29,20 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 260/390, 0.1, 50);
 camera.position.set(0, 0.85, 2.1);
 camera.lookAt(0, 0.95, 0);
+
+// كاميرا تلقائية: تتبع أبعاد النموذج الفعلية حتى يملأ الإطار (رأس وكتفين)
+let fitCounter = 0;
+function autoFit(){
+  if (!avatar) return;
+  try {
+    const box = new THREE.Box3().setFromObject(avatar);
+    const c = box.getCenter(new THREE.Vector3());
+    const s = box.getSize(new THREE.Vector3());
+    const dist = Math.max(s.y, 0.5) / (2 * Math.tan(THREE.MathUtils.degToRad(20))) * 1.25;
+    camera.position.set(c.x, c.y, c.z + dist);
+    camera.lookAt(c.x, c.y, c.z);
+  } catch(e) {}
+}
 const renderer = new THREE.WebGLRenderer({ alpha:true, antialias:true });
 renderer.setSize(260, 390);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -132,6 +146,7 @@ function tick(t){
   if (avatar) {
     avatar.position.y = 0 + Math.sin(t*0.0016)*0.03;
     avatar.rotation.y = Math.sin(t*0.0004)*0.25;
+    if (++fitCounter % 15 === 0) autoFit();
   }
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
@@ -158,7 +173,7 @@ function browserFallback(text){
 }
 
 function attachHandlers(a, text){
-  a.onplay = function(){ setTalking(true); };
+  a.onplay = function(){ setTalking(true); try { localStorage.setItem('lyal_last', text); } catch(e) {} };
   a.onended = function(){ setTalking(false); };
   a.onerror = function(){ setTalking(false); browserFallback(text); };
 }
@@ -176,7 +191,6 @@ function speak(text){
     let last = null;
     try { last = localStorage.getItem('lyal_last'); } catch(e) {}
     if (last === text) return;
-    try { localStorage.setItem('lyal_last', text); } catch(e) {}
 
     if (parentDoc) {
       let a = parentDoc.getElementById('lyal_audio');
