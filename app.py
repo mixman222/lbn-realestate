@@ -5,6 +5,7 @@
 import os, sys, sqlite3, base64
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -37,6 +38,15 @@ st.markdown("""
     .hero h1 { color: white; margin: 0 0 6px 0; }
     .hero p { color: #cfe3ea; margin: 0; font-size: 0.95rem; }
     div[data-testid="stImage"] img { border-radius: 10px; }
+    .assistant-avatar { width: 74px; height: 74px; border-radius: 50%;
+        background: linear-gradient(135deg, #ffd166 0%, #f4a261 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 2.4rem; box-shadow: 0 4px 12px rgba(0,0,0,.15);
+        animation: floaty 3s ease-in-out infinite; }
+    @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    .assistant-bubble { background: #fff8e6; border: 1.5px solid #f4a261;
+        border-radius: 14px; padding: 12px 14px; color: #5d4037; font-size: .95rem; }
+    .assistant-name { color: #b7791f; font-weight: 700; font-size: .82rem; margin-bottom: 3px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,11 +95,63 @@ for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
 
 st.markdown("---")
 
+# ---------- إلياس 🤵: المساعد الصوتي في نموذج الإعلان ----------
+STEP_MSG = {
+    1: "أهلًا! أنا إلياس 🤵 — بضل معك خطوة بخطوة. بدي منك: نوع العقار، القضاء، المنطقة والمساحة. أي خانة بتلمسها بشرحلك شو تحط فيها 👇",
+    2: "ممتاز! هلق السعر والتفاصيل. خلي السعر بواقعية — الناس بتفلتر عالسعر أول شي. والسعر هون **بليرة لبنانية** 💵",
+    3: "أخيراً! صورة ووصف ورقم التواصل. الصورة أقوى أداة بيع 🖼️ — ورقمك صح عشان يوصلوك.",
+}
+ASSISTANT_HELP = {
+    "pt": "الشقة الأكثر طلباً — اختر النوع الأدق لتصل أسرع للمشترين 🏢",
+    "gov": "القضاء هو محافظتك — بيظهر في مخطط الأسعار بالموقع 📍",
+    "loc": "أدق منطقة أوصل أسرع: حمانا، فردان، الجميزة... 🗺️",
+    "area": "المساحة الكلية بالمتر² — إحدى أهم خانات البحث 📐",
+    "price": "السعر بليرة لبنانية — مثال: 5 مليار تكتبها 5,000,000,000 💵",
+    "rooms": "عدد غرف النوم 🛏️",
+    "floor": "الطابق: 3، أرضي، آخر طابق... 🏗️",
+    "furnished": "هل العقار مفروش بالأثاث؟ 🛋️",
+    "parking": "هل يوجد موقف سيارة؟ 🚗",
+    "image": "الصور ترفع نسبة التواصل كثيراً — JPG أو PNG 📸",
+    "desc": "الوصف بيفرق: إطلالة، قرب جامعات، خدمات... ✍️",
+    "name": "اسمك يظهر للمشترين — ثقة أكبر ببياناتك 👤",
+    "phone": "رقمك بيظهر مباشرة للمشترين — تحقق قبل النشر 📞",
+}
+
+def _assistant_say(msg):
+    """يحدّث فقاعة إلياس ويقرأ الرسالة صوتياً (مرة واحدة لكل نص)"""
+    st.session_state.assistant = msg
+    if st.session_state.get("tts_last") == msg:
+        return
+    st.session_state.tts_last = msg
+    safe = msg.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
+    components.html(
+        "<script>"
+        f"try{{var u=new SpeechSynthesisUtterance('{safe}');u.lang='ar-LB';u.rate=1.02;"
+        "var vs=speechSynthesis.getVoices();"
+        "var ar=vs.filter(function(v){return v.lang&&v.lang.indexOf('ar')===0;});"
+        "if(ar.length)u.voice=ar[0];"
+        "speechSynthesis.cancel();speechSynthesis.speak(u);"
+        "}catch(e){}"
+        "</script>", height=0)
+
+def _assistant_field(key):
+    st.session_state.assistant = ASSISTANT_HELP.get(key, "")
+
 # ---------- إضافة إعلان (معالج بخطوات) ----------
 with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات بسيطة", expanded=False):
     if "ad_step" not in st.session_state:
         st.session_state.ad_step = 1
         st.session_state.ad_data = {}
+        _assistant_say(STEP_MSG[1])
+
+    # فقاعة إلياس
+    amsg = st.session_state.get("assistant") or STEP_MSG[st.session_state.ad_step]
+    a1, a2 = st.columns([1, 5], vertical_alignment="center")
+    with a1:
+        st.markdown('<div class="assistant-avatar">🤵</div>', unsafe_allow_html=True)
+    with a2:
+        st.markdown(f'<div class="assistant-bubble"><div class="assistant-name">💡 إلياس — مساعدك الشخصي</div>'
+                    f'{amsg}</div>', unsafe_allow_html=True)
 
     # شريط تقدم
     st.progress(st.session_state.ad_step / 3)
@@ -97,29 +159,40 @@ with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات �
 
     if st.session_state.ad_step == 1:
         st.subheader("1️⃣ أساسيات العقار")
-        pt = st.selectbox("نوع العقار", ["شقة", "منزل", "فيلا", "أرض", "تجاري", "مكتب", "محل", "مزرعة"])
+        pt = st.selectbox("نوع العقار", ["شقة", "منزل", "فيلا", "أرض", "تجاري", "مكتب", "محل", "مزرعة"],
+                          help=ASSISTANT_HELP["pt"], on_change=_assistant_field, args=("pt",))
         gov = st.selectbox("القضاء", ["بيروت", "المتن", "بعبدا", "عاليه", "كسروان", "جبيل", "الشوف",
-                                      "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"])
-        loc = st.text_input("المنطقة / الحي (مثال: حمانا، فردان...)")
-        area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10)
+                                      "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"],
+                           help=ASSISTANT_HELP["gov"], on_change=_assistant_field, args=("gov",))
+        loc = st.text_input("المنطقة / الحي (مثال: حمانا، فردان...)",
+                            help=ASSISTANT_HELP["loc"], on_change=_assistant_field, args=("loc",))
+        area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10,
+                               help=ASSISTANT_HELP["area"], on_change=_assistant_field, args=("area",))
         if st.button("التالي ←"):
             if not loc.strip() or area <= 0:
                 st.warning("اكتب المنطقة وأدخل المساحة.")
             else:
                 st.session_state.ad_data.update({'prop_type': pt, 'governorate': gov, 'location': loc.strip(), 'area': area})
+                _assistant_say(STEP_MSG[2])
                 st.session_state.ad_step = 2
                 st.rerun()
 
     elif st.session_state.ad_step == 2:
         st.subheader("2️⃣ السعر والتفاصيل")
-        price = st.number_input("السعر المطلوب (ليرة لبنانية)", min_value=0, value=0, step=100_000_000)
-        rooms = st.selectbox("عدد الغرف", [0, 1, 2, 3, 4, 5, 6])
-        floor = st.text_input("الطابق", placeholder="مثال: 3، أرضي، آخر طابق")
-        furnished = st.radio("التأثيث", ["غير مفروش", "مفروش", "نصف مفروش"], horizontal=True)
-        parking = st.radio("موقف سيارة", ["لا", "نعم"], horizontal=True)
+        price = st.number_input("السعر المطلوب (ليرة لبنانية)", min_value=0, value=0, step=100_000_000,
+                                help=ASSISTANT_HELP["price"], on_change=_assistant_field, args=("price",))
+        rooms = st.selectbox("عدد الغرف", [0, 1, 2, 3, 4, 5, 6],
+                             help=ASSISTANT_HELP["rooms"], on_change=_assistant_field, args=("rooms",))
+        floor = st.text_input("الطابق", placeholder="مثال: 3، أرضي، آخر طابق",
+                              help=ASSISTANT_HELP["floor"], on_change=_assistant_field, args=("floor",))
+        furnished = st.radio("التأثيث", ["غير مفروش", "مفروش", "نصف مفروش"], horizontal=True,
+                             help=ASSISTANT_HELP["furnished"], on_change=_assistant_field, args=("furnished",))
+        parking = st.radio("موقف سيارة", ["لا", "نعم"], horizontal=True,
+                           help=ASSISTANT_HELP["parking"], on_change=_assistant_field, args=("parking",))
         c1b, c2b = st.columns(2)
         with c1b:
             if st.button("→ رجوع"):
+                _assistant_say(STEP_MSG[1])
                 st.session_state.ad_step = 1
                 st.rerun()
         with c2b:
@@ -130,18 +203,23 @@ with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات �
                     st.session_state.ad_data.update({'price_lbp': price, 'rooms': rooms,
                                                      'floor': floor.strip() or 'غير محدد',
                                                      'furnished': furnished, 'parking': parking})
+                    _assistant_say(STEP_MSG[3])
                     st.session_state.ad_step = 3
                     st.rerun()
 
     else:
         st.subheader("3️⃣ صورك ومعلومات التواصل")
-        img = st.file_uploader("صورة العقار (اختياري)", type=["jpg", "jpeg", "png", "webp"])
-        desc = st.text_area("وصف مختصر (اختياري)", placeholder="مثال: شقة مطلة، إطلالة بحرية، قرب الجامعة...")
-        name = st.text_input("اسمك")
-        phone = st.text_input("رقم الهاتف (ليراه المشترون)", placeholder="70 123 456")
+        img = st.file_uploader("صورة العقار (اختياري)", type=["jpg", "jpeg", "png", "webp"],
+                               help=ASSISTANT_HELP["image"], on_change=_assistant_field, args=("image",))
+        desc = st.text_area("وصف مختصر (اختياري)", placeholder="مثال: شقة مطلة، إطلالة بحرية، قرب الجامعة...",
+                            help=ASSISTANT_HELP["desc"], on_change=_assistant_field, args=("desc",))
+        name = st.text_input("اسمك", help=ASSISTANT_HELP["name"], on_change=_assistant_field, args=("name",))
+        phone = st.text_input("رقم الهاتف (ليراه المشترون)", placeholder="70 123 456",
+                              help=ASSISTANT_HELP["phone"], on_change=_assistant_field, args=("phone",))
         c1b, c2b = st.columns(2)
         with c1b:
             if st.button("→ رجوع"):
+                _assistant_say(STEP_MSG[2])
                 st.session_state.ad_step = 2
                 st.rerun()
         with c2b:
@@ -156,6 +234,7 @@ with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات �
                                             img.getvalue() if img else None,
                                             img.name.split('.')[-1] if img else None)
                     st.success(f"🎉 تم نشر إعلانك (#{ad_id})! يظهر الآن أسفل الصفحة في قسم إعلانات المستخدمين.")
+                    _assistant_say("مبروك! 🎉 إعلانك اننشر — شوفو هلق أسفل الصفحة في قسم «إعلانات المستخدمين». أول إعلان ليك! 👏")
                     st.session_state.ad_step = 1
                     st.session_state.ad_data = {}
 
