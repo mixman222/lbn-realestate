@@ -94,6 +94,10 @@ def _lyal_render():
     enabled = st.session_state.get("lyal_on", True)
     msg = st.session_state.get("assistant", STEP_MSG[1])
     if enabled:
+        # معاينة مسبقة للنموذج حتى يظهر ليال فورًا (10MB عبر الشبكة)
+        st.iframe(
+            '<script>fetch("https://cdn.jsdelivr.net/gh/mixman222/lbn-realestate@master/models/low_poly_girl.glb").catch(function(){})</script>',
+            width=1, height=1)
         char_html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lyal.html"),
                          encoding="utf-8").read()
         st.iframe(char_html.replace("__MSG__", msg), width=268, height=400)
@@ -101,6 +105,7 @@ def _lyal_render():
         st.iframe(f"<script>try{{new BroadcastChannel('lyal').postMessage({payload});}}catch(e){{}}</script>",
                   width=1, height=1)
     else:
+        st.iframe("<div></div>", width=40, height=40)
         st.iframe("<div></div>", width=40, height=40)
         st.iframe("<div></div>", width=40, height=40)
 
