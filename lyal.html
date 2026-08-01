@@ -173,7 +173,7 @@ function browserFallback(text){
 }
 
 function attachHandlers(a, text){
-  a.onplay = function(){ setTalking(true); try { localStorage.setItem('lyal_last', text); } catch(e) {} };
+  a.onplay = function(){ setTalking(true); lyalLast = text; };
   a.onended = function(){ setTalking(false); };
   a.onerror = function(){ setTalking(false); browserFallback(text); };
 }
@@ -186,11 +186,12 @@ function playWithElement(a, text){
   if (p && p.catch) p.catch(function(){ setTalking(false); pending = text; });
 }
 
+let lyalLast = null;
+try { localStorage.removeItem('lyal_last'); } catch(e) {}
+
 function speak(text){
   try {
-    let last = null;
-    try { last = localStorage.getItem('lyal_last'); } catch(e) {}
-    if (last === text) return;
+    if (lyalLast === text) return;
 
     if (parentDoc) {
       let a = parentDoc.getElementById('lyal_audio');
