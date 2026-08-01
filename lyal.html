@@ -24,8 +24,8 @@ html, body { margin:0; padding:0; background:transparent; overflow:hidden;
 <div id="hint">🎙️ بتتكلّم باللبناني — فعّل الأصوات العربية بجهازك</div>
 <div id="stage"></div>
 <script type="importmap">
-{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js",
-"three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+"three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
 <script type="module">
 import * as THREE from 'three';
@@ -52,7 +52,9 @@ scene.add(dl);
 const grp = new THREE.Group();
 let mixer = null;
 const loader = new GLTFLoader();
-loader.load('https://raw.githubusercontent.com/mixman222/lbn-realestate/master/models/xbot.glb', function(g){
+const MODEL = 'https://cdn.jsdelivr.net/gh/mixman222/lbn-realestate@master/models/xbot.glb';
+
+function onModel(g){
   grp.add(g.scene);
   scene.add(grp);
   if (g.animations && g.animations.length) {
@@ -63,7 +65,27 @@ loader.load('https://raw.githubusercontent.com/mixman222/lbn-realestate/master/m
     const clip = THREE.AnimationClip.findByName(g, pick) || g.animations[0];
     mixer.clipAction(clip).play();
   }
-});
+}
+
+function loadModel(){
+  loader.load(MODEL, onModel);
+}
+if ('caches' in window) {
+  caches.open('lyal_cache').then(function(c){
+    c.match(MODEL).then(function(res){
+      if (res) { res.arrayBuffer().then(function(buf){ loader.parse(buf, '', onModel); }); }
+      else {
+        fetch(MODEL).then(function(r){
+          c.put(MODEL, r.clone());
+          return r.arrayBuffer();
+        }).then(function(buf){ loader.parse(buf, '', onModel); })
+        .catch(loadModel);
+      }
+    }).catch(loadModel);
+  }).catch(loadModel);
+} else {
+  loadModel();
+}
 
 function tick(t){
   if (mixer) mixer.update(0.016);
@@ -75,20 +97,24 @@ function tick(t){
 requestAnimationFrame(tick);
 
 // ---------- إطالة الـ iframe ليعوم على يسار الشاشة ----------
-if (window.frameElement) {
-  const f = window.frameElement;
-  f.style.position = 'fixed';
-  f.style.left = '4px';
-  f.style.bottom = '4px';
-  f.style.width = '268px';
-  f.style.height = '520px';
-  f.style.zIndex = '99998';
-  f.style.border = 'none';
-  f.style.background = 'transparent';
-  f.style.pointerEvents = 'none';
+function fixFrame(){
+  if (window.frameElement) {
+    const f = window.frameElement;
+    f.style.position = 'fixed';
+    f.style.left = '4px';
+    f.style.bottom = '4px';
+    f.style.width = '268px';
+    f.style.height = '520px';
+    f.style.zIndex = '99998';
+    f.style.border = 'none';
+    f.style.background = 'transparent';
+    f.style.pointerEvents = 'none';
+  }
 }
+fixFrame();
+setInterval(fixFrame, 300);
 
-// ---------- النطق باللبناني ----------
+// ---------- النطق باللبناني (بمجرد لكل نص) ----------
 let voice = null;
 function pickVoice(){
   const vs = speechSynthesis.getVoices();
@@ -101,6 +127,10 @@ speechSynthesis.addEventListener('voiceschanged', pickVoice);
 function speak(text){
   try {
     if (!voice) return;
+    let last = null;
+    try { last = localStorage.getItem('lyal_last'); } catch(e) {}
+    if (last === text) return;
+    try { localStorage.setItem('lyal_last', text); } catch(e) {}
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.voice = voice;

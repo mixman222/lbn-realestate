@@ -5,7 +5,6 @@
 import os, sys, sqlite3, base64, json
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -61,47 +60,6 @@ if df.empty:
     st.warning("لا توجد بيانات بعد — شغّل الزاحف أولاً: python scraper_opensooq.py")
     st.stop()
 
-# ---------- الهيرو ----------
-st.markdown("""
-<div class="hero">
-  <h1>🏠 عقار لبنان — اتجاهات أسعار السوق</h1>
-  <p>متابعة يومية لإعلانات السوق المفتوح: متوسطات الأسعار، سعر المتر²، وأحدث العروض —
-     بالليرة اللبنانية كما يعلنها البائع. مجاني وبلا تسجيل.</p>
-</div>
-""", unsafe_allow_html=True)
-
-tc1, tc2 = st.columns([4, 1])
-with tc1:
-    pass
-with tc2:
-    st.toggle("🎙️ ليال عم تحكي معك", value=True, key="lyal_on")
-st.caption("ليال 🦸‍♀️ مساعدتك الثلاثية الأبعاد — عائمة على يسار الشاشة، بتتكلّم باللبناني وبتوضّحلك كل خانة. تحتاج أصوات عربية مفعّلة بجهازك لسماعها.")
-
-# ---------- البطاقات ----------
-def fmt_lbp(v):
-    """تنسيق الليرة اللبنانية: مليار/مليون/ألف"""
-    if v >= 1e9:
-        return f"{v/1e9:.2f} مليار ل.ل"
-    if v >= 1e6:
-        return f"{v/1e6:.1f} مليون ل.ل"
-    if v >= 1e3:
-        return f"{v/1e3:.0f} ألف ل.ل"
-    return f"{v:,.0f} ل.ل"
-
-c1, c2, c3, c4 = st.columns(4)
-cards = [
-    ("📊 إعلانات مراقبة", f"{len(df):,}"),
-    ("🏘️ أقضية مغطاة", f"{df['governorate'].nunique()}"),
-    ("💵 متوسط سعر المتر²", fmt_lbp(df['lbp_per_m2'].median())),
-    ("🏠 متوسط سعر العقار", fmt_lbp(df['price_lbp'].median())),
-]
-for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
-    with col:
-        st.markdown(f'<div class="kpi-card"><div class="lbl">{lbl}</div>'
-                    f'<div class="val">{val}</div></div>', unsafe_allow_html=True)
-
-st.markdown("---")
-
 # ---------- ليال 🦸‍♀️: المساعدة الصوتية ثلاثية الأبعاد ----------
 STEP_MSG = {
     1: "أهلين! أنا ليال، مساعدتك الشخصية — بضلّك معك خطوة خطوة. أول شي: نوع العقار، القضاء، المنطقة والمساحة. أي خانة عم تلمسها، بوضّحلك شو عم تحط 👇",
@@ -132,25 +90,63 @@ def _assistant_field(key):
     st.session_state.assistant = ASSISTANT_HELP.get(key, "")
 
 def _lyal_render():
-    """يرسم ليال مرة واحدة، ويبثّ الرسائل عند تغيّرها فقط"""
+    """يرسم ليال عائمة على يسار الشاشة ويبثّ رسالتها (استدعاء دائم بمكان ثابت)"""
     enabled = st.session_state.get("lyal_on", True)
     msg = st.session_state.get("assistant", STEP_MSG[1])
-    a_key = ("char", enabled)
-    if st.session_state.get("lyal_a") != a_key:
-        st.session_state.lyal_a = a_key
-        if enabled:
-            char_html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lyal.html"),
-                             encoding="utf-8").read()
-            components.html(char_html.replace("__MSG__", msg), height=520, width=268, key="lyal_char")
-        else:
-            components.html("<div></div>", height=40, width=40, key="lyal_char")
     if enabled:
-        b_key = ("msg", msg)
-        if st.session_state.get("lyal_b") != b_key:
-            st.session_state.lyal_b = b_key
-            payload = json.dumps({"msg": msg}, ensure_ascii=False)
-            components.html(f"<script>try{{new BroadcastChannel('lyal').postMessage({payload});}}catch(e){{}}</script>",
-                            height=0, width=0, key="lyal_msg")
+        char_html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lyal.html"),
+                         encoding="utf-8").read()
+        st.iframe(char_html.replace("__MSG__", msg), width=268, height=520)
+        payload = json.dumps({"msg": msg}, ensure_ascii=False)
+        st.iframe(f"<script>try{{new BroadcastChannel('lyal').postMessage({payload});}}catch(e){{}}</script>",
+                  width=1, height=1)
+    else:
+        st.iframe("<div></div>", width=40, height=40)
+        st.iframe("<div></div>", width=40, height=40)
+
+# ---------- الهيرو ----------
+st.markdown("""
+<div class="hero">
+  <h1>🏠 عقار لبنان — اتجاهات أسعار السوق</h1>
+  <p>متابعة يومية لإعلانات السوق المفتوح: متوسطات الأسعار، سعر المتر²، وأحدث العروض —
+     بالليرة اللبنانية كما يعلنها البائع. مجاني وبلا تسجيل.</p>
+</div>
+""", unsafe_allow_html=True)
+
+tc1, tc2 = st.columns([4, 1])
+with tc1:
+    pass
+with tc2:
+    st.toggle("🎙️ ليال عم تحكي معك", value=True, key="lyal_on")
+st.caption("ليال 🦸‍♀️ مساعدتك الثلاثية الأبعاد — عائمة على يسار الشاشة، بتتكلّم باللبناني وبتوضّحلك كل خانة. تحتاج أصوات عربية مفعّلة بجهازك لسماعها.")
+
+# ---------- ليال: ترسم (تعويم يسار الشاشة) ----------
+_lyal_render()
+
+# ---------- البطاقات ----------
+def fmt_lbp(v):
+    """تنسيق الليرة اللبنانية: مليار/مليون/ألف"""
+    if v >= 1e9:
+        return f"{v/1e9:.2f} مليار ل.ل"
+    if v >= 1e6:
+        return f"{v/1e6:.1f} مليون ل.ل"
+    if v >= 1e3:
+        return f"{v/1e3:.0f} ألف ل.ل"
+    return f"{v:,.0f} ل.ل"
+
+c1, c2, c3, c4 = st.columns(4)
+cards = [
+    ("📊 إعلانات مراقبة", f"{len(df):,}"),
+    ("🏘️ أقضية مغطاة", f"{df['governorate'].nunique()}"),
+    ("💵 متوسط سعر المتر²", fmt_lbp(df['lbp_per_m2'].median())),
+    ("🏠 متوسط سعر العقار", fmt_lbp(df['price_lbp'].median())),
+]
+for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
+    with col:
+        st.markdown(f'<div class="kpi-card"><div class="lbl">{lbl}</div>'
+                    f'<div class="val">{val}</div></div>', unsafe_allow_html=True)
+
+st.markdown("---")
 
 # ---------- إضافة إعلان (معالج بخطوات) ----------
 with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات بسيطة", expanded=False):
@@ -425,6 +421,3 @@ if submitted:
 st.markdown("---")
 st.caption("⚠️ الأسعار بالليرة اللبنانية كما يعلنها البائع على السوق المفتوح — للتوجيه فقط، وليست تقييماً مهنياً. "
            "الأرقام الهاتفية مقنّعة؛ الرقم الكامل من صفحة الإعلان الرسمية.")
-
-# ---------- ليال: ترسم أخيراً (تعويم يسار الشاشة) ----------
-_lyal_render()
