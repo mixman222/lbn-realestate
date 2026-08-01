@@ -3,6 +3,7 @@ name: Daily Scrape
 on:
   schedule:
     - cron: "0 8 * * *"
+    - cron: "8 9 * * 5"
   workflow_dispatch:
 
 permissions:
@@ -31,4 +32,27 @@ jobs:
           git add -A
           git diff --quiet && git diff --cached --quiet || git commit -m "Daily scrape: $(date +'%Y-%m-%d')"
           git push
+
+  weekly-report:
+    runs-on: ubuntu-latest
+    needs: scrape
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Send weekly report
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_SMTP_KEY: ${{ secrets.BREVO_SMTP_KEY }}
+          BREVO_SMTP_USER: ${{ secrets.BREVO_SMTP_USER }}
+          BREVO_SENDER: ${{ secrets.BREVO_SENDER }}
+          BREVO_LIST_ID: "3"
+        run: python send_report.py
 

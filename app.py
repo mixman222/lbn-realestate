@@ -194,17 +194,26 @@ with st.form("subscribe_form", clear_on_submit=True):
 
 if submitted:
     if "@" in sub_email and "." in sub_email:
-        DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "subscribers.db")
-        conn = sqlite3.connect(DB)
-        conn.execute("CREATE TABLE IF NOT EXISTS subscribers (email TEXT PRIMARY KEY, role TEXT, created_at TEXT)")
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         try:
-            conn.execute("INSERT INTO subscribers (email, role, created_at) VALUES (?, ?, ?)",
-                         (sub_email.strip().lower(), sub_role, pd.Timestamp.now().isoformat()))
-            conn.commit()
-            st.success("🎉 تم تسجيل اشتراكك! ستصلك رسالة التفعيل قريباً.")
-        except sqlite3.IntegrityError:
-            st.info("أنت مسجّل سابقاً — شكراً لثقتك!")
-        conn.close()
+            import brevo
+            for k, v in (st.secrets.get("brevo", {}) if hasattr(st, "secrets") else {}).items():
+                os.environ.setdefault(k, v)
+            ok, msg = brevo.add_subscriber(sub_email, sub_role)
+            if ok:
+                st.success("🎉 تم تسجيل اشتراكك! سيصلك التقرير الأسبوعي قريباً.")
+            else:
+                # احتياط محلي إذا فشل السحابي
+                DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "subscribers.db")
+                conn = sqlite3.connect(DB)
+                conn.execute("CREATE TABLE IF NOT EXISTS subscribers (email TEXT PRIMARY KEY, role TEXT, created_at TEXT)")
+                conn.execute("INSERT OR IGNORE INTO subscribers (email, role, created_at) VALUES (?, ?, ?)",
+                             (sub_email.strip().lower(), sub_role, pd.Timestamp.now().isoformat()))
+                conn.commit()
+                conn.close()
+                st.success("🎉 تم تسجيل اشتراكك محلياً!")
+        except Exception:
+            st.info("النظام يخزن الاشتراكات — حاول لاحقاً.")
     else:
         st.error("يرجى إدخال بريد إلكتروني صحيح.")
 
