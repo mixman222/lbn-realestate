@@ -105,6 +105,11 @@ NEIGHBORHOOD_URLS = [
     "/en/aley/soufar/property/property-for-sale",
 ]
 
+# الإيجار: نفس الأقسام بصيغة for-rent (الروابط غير الموجودة تُتخطى تلقائياً)
+RENT_LISTING_URLS = [u.replace("-for-sale", "-for-rent") for u in LISTING_URLS]
+RENT_CITY_URLS = [u.replace("-for-sale", "-for-rent") for u in CITY_URLS]
+RENT_NEIGHBORHOOD_URLS = [u.replace("-for-sale", "-for-rent") for u in NEIGHBORHOOD_URLS]
+
 TYPE_AR = {
     "apartments": "شقة", "houses": "منزل", "villas": "فيلا", "lands": "أرض",
     "commercial": "تجاري", "residential": "سكني", "farm": "مزرعة",
@@ -135,7 +140,7 @@ def parse_items(data):
     except Exception:
         return [], {}
 
-def extract_fields(it):
+def extract_fields(it, listing_type="sale"):
     """يحوّل عنصر JSON إلى حقول قاعدة البيانات"""
     price_lbp, price_usd, cur = None, None, None
     pa = (it.get('price_amount') or '').strip()
@@ -166,6 +171,9 @@ def extract_fields(it):
             rooms = int(hm.group(1))
 
     posted = None
+    # تصفية الإيجارات السنوية — سعرها سنوي ويفسد متوسطات الشهر
+    if listing_type == "rent" and any("yearly" in (c or "").lower() for c in cps):
+        return None
     pd_ = it.get('inserted_date')
     if pd_:
         posted = pd_
@@ -211,6 +219,7 @@ def extract_fields(it):
         'image': (f"https://opensooq-imagesv2.os-cdn.com/previews/700x0/{it['image_uri']}.webp"
                   if it.get('image_uri') else None),
         'image_count': it.get('image_count'),
+        'listing_type': listing_type,
     }
 
 def init_db():
@@ -235,13 +244,19 @@ def init_db():
             phone TEXT,
             description TEXT,
             highlights TEXT,
-            image TEXT
+            image TEXT,
+            listing_type TEXT DEFAULT 'sale'
         )
     """)
+    try:
+        conn.execute("ALTER TABLE listings ADD COLUMN listing_type TEXT DEFAULT 'sale'")
+        conn.commit()
+    except Exception:
+        pass
     conn.commit()
     return conn
 
-def scrape_listing_page(url, conn):
+def scrape_listing_page(url, conn, listing_type="sale"):
     """يزحف صفحة + كل صفحاتها (?page=N)"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     added = 0
@@ -252,26 +267,28 @@ def scrape_listing_page(url, conn):
         if not items:
             break
         for it in items:
-            f = extract_fields(it)
-            if f['price_lbp'] is None:
+            f = extract_fields(it, listing_type)
+            if not f or f['price_lbp'] is None:
                 continue
             try:
                 # منع تكرار العقار نفسه: نفس البائع + السعر + المساحة بإعلان جديد = نفس العقار
                 if f['seller'] and f['area']:
                     dup = conn.execute(
-                        "SELECT id FROM listings WHERE seller=? AND price_lbp=? AND area=? AND url!=? LIMIT 1",
-                        (f['seller'], f['price_lbp'], f['area'], f['url'])).fetchone()
+                        "SELECT id FROM listings WHERE seller=? AND price_lbp=? AND area=? AND listing_type=? AND url!=? LIMIT 1",
+                        (f['seller'], f['price_lbp'], f['area'], listing_type, f['url'])).fetchone()
                     if dup:
                         conn.execute("UPDATE listings SET last_seen=? WHERE id=?", (now, dup[0]))
                         continue
                 conn.execute("""
                     INSERT OR IGNORE INTO listings
                     (url, title, price_lbp, price_usd, area, rooms, location, city, prop_type,
-                     date_posted, first_seen, last_seen, seller, seller_url, phone, description, highlights, image)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                     date_posted, first_seen, last_seen, seller, seller_url, phone, description,
+                     highlights, image, listing_type)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (f['url'], f['title'], f['price_lbp'], f['price_usd'], f['area'], f['rooms'],
                       f['location'], f['city'], f['prop_type'], f['date_posted'], now, now,
-                      f['seller'], f['seller_url'], f['phone'], f['description'], f['highlights'], f['image']))
+                      f['seller'], f['seller_url'], f['phone'], f['description'], f['highlights'],
+                      f['image'], listing_type))
                 conn.execute("UPDATE listings SET last_seen=?, price_lbp=?, price_usd=?, area=?, rooms=?, title=?, seller=?, phone=?, description=?, image=? WHERE url=?",
                              (now, f['price_lbp'], f['price_usd'], f['area'], f['rooms'], f['title'], f['seller'], f['phone'], f['description'], f['image'], f['url']))
                 added += 1
@@ -289,14 +306,21 @@ def main():
     conn = init_db()
     total = 0
     for u in LISTING_URLS + CITY_URLS + NEIGHBORHOOD_URLS:
-        n = scrape_listing_page(u, conn)
+        n = scrape_listing_page(u, conn, "sale")
         if n:
             total += n
-            print(f"{u}: +{n}")
+            print(f"[بيع] {u}: +{n}")
+        time.sleep(0.6)
+    for u in RENT_LISTING_URLS + RENT_CITY_URLS + RENT_NEIGHBORHOOD_URLS:
+        n = scrape_listing_page(u, conn, "rent")
+        if n:
+            total += n
+            print(f"[إيجار] {u}: +{n}")
         time.sleep(0.6)
     count = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
     distinct = conn.execute("SELECT COUNT(DISTINCT url) FROM listings").fetchone()[0]
-    print(f"TOTAL: {total} updates / {distinct} unique / {count} rows")
+    by_type = dict(conn.execute("SELECT listing_type, COUNT(*) FROM listings GROUP BY listing_type").fetchall())
+    print(f"TOTAL: {total} updates / {distinct} unique / {count} rows / by type: {by_type}")
     conn.close()
 
 if __name__ == "__main__":

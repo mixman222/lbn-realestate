@@ -63,13 +63,20 @@ def normalize(df, lbp_rate=15000.0):
     # القضاء من الموقع (الحي)
     df['governorate'] = df['location'].astype(str).str.strip().str.lower().map(LOCATION_MAP)
     df['governorate'] = df['governorate'].fillna(df['city_ar']).fillna("غير محدد")
+    # نوع العرض (بيع/إيجار) — القيم القديمة تعتبر بيع
+    if 'listing_type' not in df.columns:
+        df['listing_type'] = 'sale'
+    df['listing_type'] = df['listing_type'].fillna('sale').astype(str).str.strip().str.lower()
     # إزالة تكرار العقار نفسه: نفس البائع + السعر + المساحة (يبقى الأحدث)
     if 'seller' in df.columns:
         before = len(df)
         df = df.sort_values('first_seen', ascending=False)
-        df = df.drop_duplicates(subset=['seller', 'price_lbp', 'area'], keep='first')
-    # تصفية القيم الشاذة: سعر المتر² خارج [10, 30000] يعتبر خطأ (10$ تحفظ أراضي عكار الرخيصة الحقيقية)
-    mask = (df['price_per_m2'] > 10) & (df['price_per_m2'] < 30000)
+        df = df.drop_duplicates(subset=['seller', 'price_lbp', 'area', 'listing_type'], keep='first')
+    # تصفية القيم الشاذة حسب النوع:
+    #  - بيع: سعر المتر² خارج [10, 30000] يعتبر خطأ (10$ تحفظ أراضي عكار الرخيصة الحقيقية)
+    #  - إيجار: شهري — الحدود أضيق وأوطأ بكثير
+    mask = (((df['price_per_m2'] > 10) & (df['price_per_m2'] < 30000)) & (df['listing_type'] != 'rent')) | \
+           (((df['price_per_m2'] > 0.2) & (df['price_per_m2'] < 500)) & (df['listing_type'] == 'rent'))
     df = df[mask]
     # التاريخ
     df['date_posted'] = pd.to_datetime(df['date_posted'], format='%d-%m-%Y', errors='coerce')

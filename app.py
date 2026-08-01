@@ -60,6 +60,16 @@ if df.empty:
     st.warning("لا توجد بيانات بعد — شغّل الزاحف أولاً: python scraper_opensooq.py")
     st.stop()
 
+# نوع السوق (بيع / إيجار شهري)
+if 'listing_type' not in df.columns:
+    df['listing_type'] = 'sale'
+df['listing_type'] = df['listing_type'].fillna('sale').astype(str).str.strip().str.lower()
+DEAL_CHOICES = {"البيع": "sale", "الإيجار (شهري)": "rent"}
+sel_deal = st.radio("نوع السوق", list(DEAL_CHOICES.keys()), horizontal=True,
+                    index=0, help="أسعار البيع مقابل إيجار الشقق الشهري")
+is_rent = DEAL_CHOICES[sel_deal] == "rent"
+dd = df[df['listing_type'] == DEAL_CHOICES[sel_deal]]
+
 # ---------- ليال 🦸‍♀️: المساعدة الصوتية ثلاثية الأبعاد ----------
 STEP_MSG = {
     1: "أهلين! أنا ليال، مساعدتك الشخصية — بضلّك معك خطوة خطوة. أول شي: نوع العقار، القضاء، المنطقة والمساحة. أي خانة عم تلمسها، بوضّحلك شو عم تحط 👇",
@@ -141,15 +151,19 @@ def fmt_lbp(v):
 
 c1, c2, c3, c4 = st.columns(4)
 cards = [
-    ("📊 إعلانات مراقبة", f"{len(df):,}"),
-    ("🏘️ أقضية مغطاة", f"{df['governorate'].nunique()}"),
-    ("💵 متوسط سعر المتر²", fmt_lbp(df['lbp_per_m2'].median())),
-    ("🏠 متوسط سعر العقار", fmt_lbp(df['price_lbp'].median())),
+    ("📊 إعلانات مراقبة", f"{len(dd):,}"),
+    ("🏘️ أقضية مغطاة", f"{dd['governorate'].nunique()}"),
+    (f"💵 متوسط سعر المتر²{'/شهر' if is_rent else ''}", fmt_lbp(dd['lbp_per_m2'].median()) if not dd.empty else "—"),
+    (f"🏠 متوسط سعر العقار{'/شهر' if is_rent else ''}", fmt_lbp(dd['price_lbp'].median()) if not dd.empty else "—"),
 ]
 for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
     with col:
         st.markdown(f'<div class="kpi-card"><div class="lbl">{lbl}</div>'
                     f'<div class="val">{val}</div></div>', unsafe_allow_html=True)
+
+if dd.empty:
+    st.info("لا توجد إعلانات لهذا النوع بعد — سيصل الزاحف يومياً.")
+    st.stop()
 
 st.markdown("---")
 
@@ -248,8 +262,8 @@ with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات �
 st.markdown("---")
 
 # ---------- اتجاهات السعر ----------
-st.subheader("📈 متوسط سعر المتر² حسب القضاء (ل.ل)")
-g = (df.groupby('governorate')
+st.subheader(f"📈 متوسط سعر المتر² حسب القضاء{' (شهرياً)' if is_rent else ''} (ل.ل)")
+g = (dd.groupby('governorate')
        .agg(متوسط=('lbp_per_m2', 'median'), عدد=('id', 'count'))
        .reset_index().sort_values('متوسط'))
 fig = go.Figure(go.Bar(
@@ -258,7 +272,7 @@ fig = go.Figure(go.Bar(
     marker=dict(color=g['متوسط'], colorscale='Tealgrn'),
 ))
 fig.update_layout(height=480, margin=dict(l=10, r=60, t=10, b=10),
-                  xaxis_title="ليرة/م²", yaxis_title="", showlegend=False,
+                  xaxis_title="ليرة/م²" + (" شهرياً" if is_rent else ""), yaxis_title="", showlegend=False,
                   font=dict(size=13))
 st.plotly_chart(fig, use_container_width=True)
 
@@ -292,7 +306,11 @@ try:
                                     'display:flex;align-items:center;justify-content:center;'
                                     'color:#9aa7ad;">لا صورة</div>', unsafe_allow_html=True)
                 with ct:
-                    st.markdown(f"**{r['prop_type']} — {r['location']}، {r['governorate']}**")
+                    deal = r.get('deal_type') if 'deal_type' in r.index and pd.notna(r.get('deal_type')) else "للبيع"
+                    deal_tag = "🔑 للإيجار" if str(deal).strip() == "للإيجار" else "🏷️ للبيع"
+                    price_extra = " شهرياً" if str(deal).strip() == "للإيجار" else ""
+                    st.markdown(f"**{r['prop_type']} — {r['location']}، {r['governorate']}** "
+                                f"<span class='tag'>{deal_tag}</span>", unsafe_allow_html=True)
                     details = [f"{r['area']:.0f} م²" if pd.notna(r['area']) and r['area'] > 0 else ""]
                     if pd.notna(r['rooms']) and r['rooms'] > 0:
                         details.append(f"{r['rooms']:.0f} غرف")
@@ -303,7 +321,8 @@ try:
                     st.markdown(f"👤 {r['name']} &nbsp;·&nbsp; <span class='phone-chip'>📞 {r['phone']}</span>",
                                 unsafe_allow_html=True)
                 with cp:
-                    st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}{price_extra}</div>',
+                                unsafe_allow_html=True)
         st.markdown("---")
 except Exception:
     pass
@@ -312,10 +331,10 @@ except Exception:
 st.subheader("🔍 الإعلانات")
 f1, f2, f3, f4, f5 = st.columns(5)
 with f1:
-    govs = ["الكل"] + sorted(df['governorate'].dropna().unique().tolist())
+    govs = ["الكل"] + sorted(dd['governorate'].dropna().unique().tolist())
     sel_gov = st.selectbox("القضاء", govs)
 with f2:
-    types = ["الكل"] + sorted(df['prop_type'].dropna().unique().tolist())
+    types = ["الكل"] + sorted(dd['prop_type'].dropna().unique().tolist())
     sel_type = st.selectbox("نوع العقار", types)
 with f3:
     rooms_opts = ["الكل", "1+", "2+", "3+"]
@@ -325,7 +344,7 @@ with f4:
 with f5:
     sort_by = st.selectbox("ترتيب", ["الأحدث", "السعر من الأقل", "السعر من الأعلى", "أقل سعر للمتر"])
 
-f = df.copy()
+f = dd.copy()
 if sel_gov != "الكل":
     f = f[f['governorate'] == sel_gov]
 if sel_type != "الكل":
@@ -336,6 +355,9 @@ if sel_rooms != "الكل":
 if max_price > 0:
     f = f[f['price_usd'] <= max_price]
 
+st.caption(f"عرض {min(len(f), 30)} من {len(f):,} إعلان"
+           f"{' للإيجار شهرياً' if is_rent else ' للبيع'}")
+
 if sort_by == "الأحدث":
     f = f.sort_values('date_posted', ascending=False, na_position='last')
 elif sort_by == "السعر من الأقل":
@@ -344,8 +366,6 @@ elif sort_by == "السعر من الأعلى":
     f = f.sort_values('price_lbp', ascending=False)
 else:
     f = f.sort_values('lbp_per_m2')
-
-st.caption(f"عرض {min(len(f), 30)} من {len(f):,} إعلان")
 
 for _, r in f.head(30).iterrows():
     loc = f"{r['location']}، {r['city_ar']}" if pd.notna(r['location']) and str(r['location']).strip() else r['city_ar']
@@ -383,9 +403,11 @@ for _, r in f.head(30).iterrows():
             st.markdown(f'<a class="cta-btn" href="https://lb.opensooq.com{r["url"]}" target="_blank">عرض الإعلان كاملاً — كشف رقم الهاتف</a>',
                         unsafe_allow_html=True)
         with col_price:
-            st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}{"/شهر" if is_rent else ""}</div>',
+                        unsafe_allow_html=True)
             if pd.notna(r['area']) and r['area'] > 0:
-                st.markdown(f'<div class="muted">{fmt_lbp(r["lbp_per_m2"])}/م²</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="muted">{fmt_lbp(r["lbp_per_m2"])}/م²{"/شهر" if is_rent else ""}</div>',
+                            unsafe_allow_html=True)
 
 st.markdown("---")
 
