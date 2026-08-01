@@ -34,12 +34,13 @@ renderer.setSize(260, 390);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 stage.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+// إضاءة ناعمة موحّدة حتى ما تظهر الراس داكنة كالخوذة
+scene.add(new THREE.HemisphereLight(0xffffff, 0xdfd3c8, 1.4));
 const dl = new THREE.DirectionalLight(0xffffff, 1.0);
 dl.position.set(1, 2, 1.5);
 scene.add(dl);
-const dl2 = new THREE.DirectionalLight(0xffd9c0, 0.5);
-dl2.position.set(-1.5, 0.5, -1);
+const dl2 = new THREE.DirectionalLight(0xffe0d0, 0.6);
+dl2.position.set(-1.5, 1, -1);
 scene.add(dl2);
 
 // ---------- إطالة الـ iframe ليعوم على يسار الشاشة ----------
@@ -64,10 +65,16 @@ setInterval(fixFrame, 300);
 const loader = new GLTFLoader();
 let avatar = null, mixer = null, mixerEyes = null;
 let idleAction = null, talkAction = null;
-let talking = false;
 
 function onAvatar(gltf){
   avatar = gltf.scene;
+  // إصلاح الخوذة: إزالة الرسم المزدوج الوجه الذي يعطي مظهر الخوذة الداكنة
+  avatar.traverse(o => {
+    if (o.isMesh && o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(m => { m.side = THREE.FrontSide; });
+    }
+  });
   scene.add(avatar);
   mixer = new THREE.AnimationMixer(avatar);
   const eyeClip = (gltf.animations || []).filter(a => (a.name || '').indexOf('idle_eyes') === 0)[0];
@@ -109,7 +116,6 @@ if ('caches' in window) {
 } else { loadAvatar(); }
 
 function setTalking(on){
-  talking = on;
   if (!mixer || !talkAction) return;
   if (on) {
     idleAction.fadeOut(0.3);
@@ -132,8 +138,9 @@ function tick(t){
 }
 requestAnimationFrame(tick);
 
-// ---------- الصوت: أنثى عربية (Google TTS) + احتياط المتصفح ----------
-const audio = new Audio();
+// ---------- الصوت: يُشغَّل في صفحة الوالد (لأن المتصفح بيمنع الصوت داخل الإطار) ----------
+const parentDoc = (function(){ try { return window.parent.document; } catch(e){ return null; } })();
+const localAudio = new Audio();
 let pending = null;
 
 function browserFallback(text){
@@ -150,19 +157,39 @@ function browserFallback(text){
   } catch(e) {}
 }
 
+function attachHandlers(a, text){
+  a.onplay = function(){ setTalking(true); };
+  a.onended = function(){ setTalking(false); };
+  a.onerror = function(){ setTalking(false); browserFallback(text); };
+}
+
+function playWithElement(a, text){
+  attachHandlers(a, text);
+  a.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ar&q=' +
+          encodeURIComponent(text);
+  const p = a.play();
+  if (p && p.catch) p.catch(function(){ setTalking(false); pending = text; });
+}
+
 function speak(text){
   try {
     let last = null;
     try { last = localStorage.getItem('lyal_last'); } catch(e) {}
     if (last === text) return;
     try { localStorage.setItem('lyal_last', text); } catch(e) {}
-    audio.onerror = function(){ setTalking(false); browserFallback(text); };
-    audio.onended = function(){ setTalking(false); };
-    audio.onplay = function(){ setTalking(true); };
-    audio.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ar&q=' +
-                encodeURIComponent(text);
-    const p = audio.play();
-    if (p && p.catch) p.catch(function(){ setTalking(false); pending = text; });
+
+    if (parentDoc) {
+      let a = parentDoc.getElementById('lyal_audio');
+      if (!a) {
+        a = parentDoc.createElement('audio');
+        a.id = 'lyal_audio';
+        a.style.display = 'none';
+        parentDoc.body.appendChild(a);
+      }
+      playWithElement(a, text);
+      return;
+    }
+    playWithElement(localAudio, text);
   } catch(e) {}
 }
 
@@ -172,14 +199,14 @@ function tryPending(){
   speak(t);
 }
 
-// المستمعين على صفحة الوالد (لأن إطارنا شفاف للنقرات):
-// هيك أول نقرة بأي مكان بتشغّل الترحيب المعلّق
-try {
-  const pd = window.parent.document;
-  pd.addEventListener('click', tryPending, { passive:true });
-  pd.addEventListener('touchstart', tryPending, { passive:true });
-  pd.addEventListener('keydown', tryPending, { passive:true });
-} catch(e) {}
+// أول نقرة بأي مكان بالصفحة (الوالد) بتشغّل الترحيب المعلّق
+if (parentDoc) {
+  parentDoc.addEventListener('click', tryPending, { passive:true });
+  parentDoc.addEventListener('touchstart', tryPending, { passive:true });
+  parentDoc.addEventListener('keydown', tryPending, { passive:true });
+} else {
+  document.addEventListener('click', tryPending);
+}
 
 // ---------- استقبال الرسائل من التطبيق ----------
 const ch = new BroadcastChannel('lyal');
