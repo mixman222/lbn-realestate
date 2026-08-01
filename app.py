@@ -56,7 +56,7 @@ st.markdown("""
 <div class="hero">
   <h1>🏠 عقار لبنان — اتجاهات أسعار السوق</h1>
   <p>متابعة يومية لإعلانات السوق المفتوح: متوسطات الأسعار، سعر المتر²، وأحدث العروض —
-     بالدولار (سعر الصرف الرسمي). مجاني وبلا تسجيل.</p>
+     بالليرة اللبنانية كما يعلنها البائع. مجاني وبلا تسجيل.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -85,6 +85,82 @@ for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
 
 st.markdown("---")
 
+# ---------- إضافة إعلان (معالج بخطوات) ----------
+with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات بسيطة", expanded=False):
+    if "ad_step" not in st.session_state:
+        st.session_state.ad_step = 1
+        st.session_state.ad_data = {}
+
+    # شريط تقدم
+    st.progress(st.session_state.ad_step / 3)
+    st.caption(f"الخطوة {st.session_state.ad_step} من 3")
+
+    if st.session_state.ad_step == 1:
+        st.subheader("1️⃣ أساسيات العقار")
+        pt = st.selectbox("نوع العقار", ["شقة", "منزل", "فيلا", "أرض", "تجاري", "مكتب", "محل", "مزرعة"])
+        gov = st.selectbox("القضاء", ["بيروت", "المتن", "بعبدا", "عاليه", "كسروان", "جبيل", "الشوف",
+                                      "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"])
+        loc = st.text_input("المنطقة / الحي (مثال: حمانا، فردان...)")
+        area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10)
+        if st.button("التالي ←"):
+            if not loc.strip() or area <= 0:
+                st.warning("اكتب المنطقة وأدخل المساحة.")
+            else:
+                st.session_state.ad_data.update({'prop_type': pt, 'governorate': gov, 'location': loc.strip(), 'area': area})
+                st.session_state.ad_step = 2
+                st.rerun()
+
+    elif st.session_state.ad_step == 2:
+        st.subheader("2️⃣ السعر والتفاصيل")
+        price = st.number_input("السعر المطلوب (ليرة لبنانية)", min_value=0, value=0, step=100_000_000)
+        rooms = st.selectbox("عدد الغرف", [0, 1, 2, 3, 4, 5, 6])
+        floor = st.text_input("الطابق", placeholder="مثال: 3، أرضي، آخر طابق")
+        furnished = st.radio("التأثيث", ["غير مفروش", "مفروش", "نصف مفروش"], horizontal=True)
+        parking = st.radio("موقف سيارة", ["لا", "نعم"], horizontal=True)
+        c1b, c2b = st.columns(2)
+        with c1b:
+            if st.button("→ رجوع"):
+                st.session_state.ad_step = 1
+                st.rerun()
+        with c2b:
+            if st.button("التالي ←"):
+                if price <= 0:
+                    st.warning("أدخل السعر.")
+                else:
+                    st.session_state.ad_data.update({'price_lbp': price, 'rooms': rooms,
+                                                     'floor': floor.strip() or 'غير محدد',
+                                                     'furnished': furnished, 'parking': parking})
+                    st.session_state.ad_step = 3
+                    st.rerun()
+
+    else:
+        st.subheader("3️⃣ صورك ومعلومات التواصل")
+        img = st.file_uploader("صورة العقار (اختياري)", type=["jpg", "jpeg", "png", "webp"])
+        desc = st.text_area("وصف مختصر (اختياري)", placeholder="مثال: شقة مطلة، إطلالة بحرية، قرب الجامعة...")
+        name = st.text_input("اسمك")
+        phone = st.text_input("رقم الهاتف (ليراه المشترون)", placeholder="70 123 456")
+        c1b, c2b = st.columns(2)
+        with c1b:
+            if st.button("→ رجوع"):
+                st.session_state.ad_step = 2
+                st.rerun()
+        with c2b:
+            if st.button("🚀 نشر الإعلان"):
+                if not name.strip() or not phone.strip():
+                    st.warning("أدخل اسمك ورقم هاتفك.")
+                else:
+                    import user_ads
+                    ad = {**st.session_state.ad_data,
+                          'description': desc.strip(), 'name': name.strip(), 'phone': phone.strip()}
+                    ad_id = user_ads.add_ad(ad,
+                                            img.getvalue() if img else None,
+                                            img.name.split('.')[-1] if img else None)
+                    st.success(f"🎉 تم نشر إعلانك (#{ad_id})! يظهر الآن أسفل الصفحة في قسم إعلانات المستخدمين.")
+                    st.session_state.ad_step = 1
+                    st.session_state.ad_data = {}
+
+st.markdown("---")
+
 # ---------- اتجاهات السعر ----------
 st.subheader("📈 متوسط سعر المتر² حسب القضاء (ل.ل)")
 g = (df.groupby('governorate')
@@ -102,7 +178,43 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
 
-# ---------- البحث والفلترة ----------
+# ---------- إعلانات المستخدمين ----------
+try:
+    import user_ads
+    uads = user_ads.load_ads()
+    if not uads.empty:
+        st.subheader(f"🟢 إعلانات المستخدمين ({len(uads)})")
+        for _, r in uads.iterrows():
+            with st.container(border=True):
+                ci, ct, cp = st.columns([1, 2.4, 1])
+                with ci:
+                    if pd.notna(r['image_path']) and os.path.exists(r['image_path']):
+                        try:
+                            st.image(r['image_path'], use_container_width=True)
+                        except Exception:
+                            pass
+                    else:
+                        st.markdown('<div style="height:120px;background:#eef4f6;border-radius:10px;'
+                                    'display:flex;align-items:center;justify-content:center;'
+                                    'color:#9aa7ad;">لا صورة</div>', unsafe_allow_html=True)
+                with ct:
+                    st.markdown(f"**{r['prop_type']} — {r['location']}، {r['governorate']}**")
+                    details = [f"{r['area']:.0f} م²" if pd.notna(r['area']) and r['area'] > 0 else ""]
+                    if pd.notna(r['rooms']) and r['rooms'] > 0:
+                        details.append(f"{r['rooms']:.0f} غرف")
+                    details += [r['furnished'] or "", r['floor'] or ""]
+                    st.markdown(" · ".join(d for d in details if d))
+                    if pd.notna(r['description']) and str(r['description']).strip():
+                        st.markdown(f'<div class="muted">{r["description"]}</div>', unsafe_allow_html=True)
+                    st.markdown(f"👤 {r['name']} &nbsp;·&nbsp; <span class='phone-chip'>📞 {r['phone']}</span>",
+                                unsafe_allow_html=True)
+                with cp:
+                    st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}</div>', unsafe_allow_html=True)
+        st.markdown("---")
+except Exception:
+    pass
+
+# ---------- الإعلانات ----------
 st.subheader("🔍 الإعلانات")
 f1, f2, f3, f4, f5 = st.columns(5)
 with f1:
@@ -115,7 +227,7 @@ with f3:
     rooms_opts = ["الكل", "1+", "2+", "3+"]
     sel_rooms = st.selectbox("الغرف", rooms_opts)
 with f4:
-    max_price = st.number_input("الحد الأقصى ($)", min_value=0, value=0, step=50000)
+    max_price = st.number_input("الحد الأقصى (ل.ل)", min_value=0, value=0, step=100_000_000)
 with f5:
     sort_by = st.selectbox("ترتيب", ["الأحدث", "السعر من الأقل", "السعر من الأعلى", "أقل سعر للمتر"])
 
