@@ -19,23 +19,53 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const G = 'https://cdn.jsdelivr.net/gh/mixman222/lbn-realestate@master/models/';
-const AVATAR = G + 'half-body.glb';
-const ANIM_IDLE = G + 'F_Standing_Idle.glb';
-const ANIM_TALK = G + 'F_Talking.glb';
+const AVATAR = G + 'low_poly_girl.glb';
 
 // ---------- المشهد ----------
 const stage = document.getElementById('stage');
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 260/390, 0.1, 50);
-camera.position.set(0, 0.85, 2.1);
-camera.lookAt(0, 0.95, 0);
+camera.position.set(0, 0.85, 3.2);
+camera.lookAt(0, 0.9, 0);
 
-// كاميرا تلقائية: تتبع أبعاد النموذج الفعلية حتى يملأ الإطار (رأس وكتفين)
+// كاميرا تلقائية تعتمد الأبعاد العالمية الحقيقية للجلد
+// (Box3.setFromObject يرجع الصندوق المحلي فقط للنماذج المزيلة بالعظام)
 let fitCounter = 0;
+function skinnedBounds(obj){
+  const box = new THREE.Box3();
+  const v = new THREE.Vector3(), t = new THREE.Vector3();
+  const m = new THREE.Matrix4();
+  obj.updateMatrixWorld(true);
+  let any = false;
+  obj.traverse(o => {
+    if (!o.isSkinnedMesh || !o.skeleton) return;
+    const g = o.geometry;
+    const pos = g.attributes.position;
+    const gi = g.attributes.skinIndex, gw = g.attributes.skinWeight;
+    const bones = o.skeleton.bones, invs = o.skeleton.boneInverses;
+    const J = [0,0,0,0], W = [0,0,0,0];
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      let x = 0, y = 0, z = 0;
+      J[0]=gi.getX(i); J[1]=gi.getY(i); J[2]=gi.getZ(i); J[3]=gi.getW(i);
+      W[0]=gw.getX(i); W[1]=gw.getY(i); W[2]=gw.getZ(i); W[3]=gw.getW(i);
+      for (let k = 0; k < 4; k++) {
+        const b = J[k], w = W[k];
+        if (!w || !bones[b]) continue;
+        m.multiplyMatrices(bones[b].matrixWorld, invs[b]);
+        t.copy(v).applyMatrix4(m);
+        x += t.x*w; y += t.y*w; z += t.z*w;
+      }
+      box.expandByPoint(v.set(x, y, z));
+    }
+    any = true;
+  });
+  return any ? box : null;
+}
 function autoFit(){
   if (!avatar) return;
   try {
-    const box = new THREE.Box3().setFromObject(avatar);
+    const box = skinnedBounds(avatar) || new THREE.Box3().setFromObject(avatar);
     const c = box.getCenter(new THREE.Vector3());
     const s = box.getSize(new THREE.Vector3());
     const dist = Math.max(s.y, 0.5) / (2 * Math.tan(THREE.MathUtils.degToRad(20))) * 1.25;
@@ -82,7 +112,6 @@ let idleAction = null, talkAction = null;
 
 function onAvatar(gltf){
   avatar = gltf.scene;
-  // إصلاح الخوذة: إزالة الرسم المزدوج الوجه الذي يعطي مظهر الخوذة الداكنة
   avatar.traverse(o => {
     if (o.isMesh && o.material) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
@@ -90,44 +119,29 @@ function onAvatar(gltf){
     }
   });
   scene.add(avatar);
+  autoFit();
   mixer = new THREE.AnimationMixer(avatar);
-  const eyeClip = (gltf.animations || []).filter(a => (a.name || '').indexOf('idle_eyes') === 0)[0];
-  if (eyeClip) {
+  const clips = gltf.animations || [];
+  const findClip = re => clips.filter(a => re.test(a.name || ''))[0];
+  const idleC = findClip(/^idle$/i) || findClip(/^idle\s*2$/i) || findClip(/idle/i);
+  const talkC = findClip(/cycle_talking/i);
+  const blinkC = findClip(/expressions_blinking/i);
+  if (idleC) { idleAction = mixer.clipAction(idleC); idleAction.play(); }
+  if (talkC) { talkAction = mixer.clipAction(talkC); }
+  if (blinkC) {
     mixerEyes = new THREE.AnimationMixer(avatar);
-    mixerEyes.clipAction(eyeClip).play();
+    mixerEyes.clipAction(blinkC).play();
   }
-  loadAnim(ANIM_IDLE, function(ag){
-    idleAction = mixer.clipAction(ag.animations[0]);
-    idleAction.play();
-    loadAnim(ANIM_TALK, function(tg){
-      talkAction = mixer.clipAction(tg.animations[0]);
-    });
-  });
-}
-
-function loadAnim(url, cb){
-  loader.load(url, function(g){ cb(g); }, undefined, function(){
-    setTimeout(function(){ loader.load(url, cb, undefined, function(){}); }, 1500);
-  });
 }
 
 function loadAvatar(){
-  loader.load(AVATAR, onAvatar);
+  loadTries++;
+  loader.load(AVATAR, onAvatar, undefined, function(){
+    if (loadTries < 2) setTimeout(loadAvatar, 2500);
+  });
 }
-if ('caches' in window) {
-  caches.open('lyal_cache').then(function(c){
-    c.match(AVATAR).then(function(res){
-      if (res) { res.arrayBuffer().then(function(buf){ loader.parse(buf, '', onAvatar); }); }
-      else {
-        fetch(AVATAR).then(function(r){
-          c.put(AVATAR, r.clone());
-          return r.arrayBuffer();
-        }).then(function(buf){ loader.parse(buf, '', onAvatar); })
-        .catch(loadAvatar);
-      }
-    }).catch(loadAvatar);
-  }).catch(loadAvatar);
-} else { loadAvatar(); }
+let loadTries = 0;
+loadAvatar();
 
 function setTalking(on){
   if (!mixer || !talkAction) return;
