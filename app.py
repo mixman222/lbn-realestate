@@ -96,7 +96,7 @@ def _lyal_render():
     if enabled:
         char_html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lyal.html"),
                          encoding="utf-8").read()
-        st.iframe(char_html.replace("__MSG__", msg), width=230, height=260)
+        st.iframe(char_html.replace("__MSG__", msg), width=268, height=400)
         payload = json.dumps({"msg": msg}, ensure_ascii=False)
         st.iframe(f"<script>try{{new BroadcastChannel('lyal').postMessage({payload});}}catch(e){{}}</script>",
                   width=1, height=1)

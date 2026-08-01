@@ -4,129 +4,191 @@
 <meta charset="utf-8">
 <style>
 html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
-#wrap { position:fixed; left:16px; bottom:14px; z-index:99999;
-  perspective: 600px; pointer-events:none; }
-#card { width:190px; height:190px; border-radius:50%;
-  background: radial-gradient(circle at 30% 25%, #ff9a9e, #fad0c4 45%, #a18cd1 100%);
-  padding:5px; box-shadow: 0 10px 34px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.25);
-  transform-style: preserve-3d; animation: floaty 4s ease-in-out infinite;
-  position:relative; }
-#card img { width:100%; height:100%; border-radius:50%; object-fit:cover; display:block;
-  border:3px solid #fff; }
-#ring { position:absolute; inset:-8px; border-radius:50%;
-  border:3px solid rgba(233,30,99,.55); animation: pulse 2.2s ease-in-out infinite; }
-#name { margin-top:10px; text-align:center; color:#fff; font-family:'Segoe UI',Tahoma,sans-serif;
-  font-size:.85rem; font-weight:700; background:rgba(173,20,87,.92); border-radius:20px;
-  padding:4px 14px; display:inline-block; box-shadow:0 4px 12px rgba(0,0,0,.25); }
-.center { text-align:center; }
-.speaking #card { animation: talk 0.4s ease-in-out infinite alternate, floaty 4s ease-in-out infinite; }
-@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-@keyframes talk { from { transform: scale(1); } to { transform: scale(1.04); } }
-@keyframes pulse { 0%,100% { transform: scale(1); opacity:.9; }
-  50% { transform: scale(1.07); opacity:.45; } }
+#stage { position:fixed; left:6px; bottom:6px; width:260px; height:390px; z-index:99999; }
+#stage canvas { border-radius: 16px; }
 </style>
 </head>
 <body>
-<div id="wrap">
-  <div id="card">
-    <div id="ring"></div>
-    <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80" alt="ليال">
-  </div>
-  <div class="center"><div id="name">ليال 🦸‍♀️</div></div>
-</div>
-<script>
-(function(){
-  var wrap = document.getElementById('wrap');
-  var card = document.getElementById('card');
+<div id="stage"></div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+"three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-  // ---------- إطالة الـ iframe ليعوم على يسار الشاشة ----------
-  function fixFrame(){
-    if (window.frameElement) {
-      var f = window.frameElement;
-      f.style.position = 'fixed';
-      f.style.left = '0px';
-      f.style.bottom = '0px';
-      f.style.width = '230px';
-      f.style.height = '260px';
-      f.style.zIndex = '99998';
-      f.style.border = 'none';
-      f.style.background = 'transparent';
-      f.style.pointerEvents = 'none';
-    }
+const G = 'https://cdn.jsdelivr.net/gh/mixman222/lbn-realestate@master/models/';
+const AVATAR = G + 'half-body.glb';
+const ANIM_IDLE = G + 'F_Standing_Idle.glb';
+const ANIM_TALK = G + 'F_Talking.glb';
+
+// ---------- المشهد ----------
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 260/390, 0.1, 50);
+camera.position.set(0, 0.85, 2.1);
+camera.lookAt(0, 0.95, 0);
+const renderer = new THREE.WebGLRenderer({ alpha:true, antialias:true });
+renderer.setSize(260, 390);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+stage.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+const dl = new THREE.DirectionalLight(0xffffff, 1.0);
+dl.position.set(1, 2, 1.5);
+scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0xffd9c0, 0.5);
+dl2.position.set(-1.5, 0.5, -1);
+scene.add(dl2);
+
+// ---------- إطالة الـ iframe ليعوم على يسار الشاشة ----------
+function fixFrame(){
+  if (window.frameElement) {
+    const f = window.frameElement;
+    f.style.position = 'fixed';
+    f.style.left = '4px';
+    f.style.bottom = '4px';
+    f.style.width = '268px';
+    f.style.height = '400px';
+    f.style.zIndex = '99998';
+    f.style.border = 'none';
+    f.style.background = 'transparent';
+    f.style.pointerEvents = 'none';
   }
-  fixFrame();
-  setInterval(fixFrame, 300);
+}
+fixFrame();
+setInterval(fixFrame, 300);
 
-  // ---------- إمالة ثلاثية الأبعاد خفيفة مع حركة الماوس ----------
-  document.addEventListener('mousemove', function(e){
-    try {
-      var r = wrap.getBoundingClientRect();
-      var cx = r.left + r.width/2, cy = r.top + r.height/2;
-      var dx = (e.clientX - cx) / 40, dy = (e.clientY - cy) / 40;
-      card.style.transform = 'rotateY(' + (-dx) + 'deg) rotateX(' + dy + 'deg)';
-    } catch(err) {}
+// ---------- تحميل النموذج والحركات ----------
+const loader = new GLTFLoader();
+let avatar = null, mixer = null, mixerEyes = null;
+let idleAction = null, talkAction = null;
+let talking = false;
+
+function onAvatar(gltf){
+  avatar = gltf.scene;
+  scene.add(avatar);
+  mixer = new THREE.AnimationMixer(avatar);
+  const eyeClip = (gltf.animations || []).filter(a => (a.name || '').indexOf('idle_eyes') === 0)[0];
+  if (eyeClip) {
+    mixerEyes = new THREE.AnimationMixer(avatar);
+    mixerEyes.clipAction(eyeClip).play();
+  }
+  loadAnim(ANIM_IDLE, function(ag){
+    idleAction = mixer.clipAction(ag.animations[0]);
+    idleAction.play();
+    loadAnim(ANIM_TALK, function(tg){
+      talkAction = mixer.clipAction(tg.animations[0]);
+    });
   });
-  document.addEventListener('mouseleave', function(){ card.style.transform = ''; });
+}
 
-  // ---------- الصوت: أنثى عربية عبر Google TTS، مع احتياط المتصفح ----------
-  var audio = new Audio();
-  var pending = null;
-  var speaking = false;
+function loadAnim(url, cb){
+  loader.load(url, function(g){ cb(g); }, undefined, function(){
+    setTimeout(function(){ loader.load(url, cb, undefined, function(){}); }, 1500);
+  });
+}
 
-  function setSpeaking(on){
-    speaking = on;
-    card.parentElement.parentElement.classList.toggle('speaking', on);
-  }
-
-  function browserFallback(text){
-    try {
-      var vs = speechSynthesis.getVoices();
-      var v = vs.filter(function(x){ return x.lang && x.lang.indexOf('ar') === 0; })[0];
-      if (!v) return;
-      speechSynthesis.cancel();
-      var u = new SpeechSynthesisUtterance(text);
-      u.voice = v; u.lang = v.lang; u.rate = 1.02;
-      u.onstart = function(){ setSpeaking(true); };
-      u.onend = function(){ setSpeaking(false); };
-      speechSynthesis.speak(u);
-    } catch(e) {}
-  }
-
-  function speak(text){
-    try {
-      var last = null;
-      try { last = localStorage.getItem('lyal_last'); } catch(e) {}
-      if (last === text) return;
-      try { localStorage.setItem('lyal_last', text); } catch(e) {}
-      audio.onerror = function(){ setSpeaking(false); browserFallback(text); };
-      audio.onended = function(){ setSpeaking(false); };
-      audio.onplay = function(){ setSpeaking(true); };
-      audio.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ar&q=' +
-                  encodeURIComponent(text);
-      var p = audio.play();
-      if (p && p.catch) {
-        p.catch(function(){ setSpeaking(false); pending = text; });
+function loadAvatar(){
+  loader.load(AVATAR, onAvatar);
+}
+if ('caches' in window) {
+  caches.open('lyal_cache').then(function(c){
+    c.match(AVATAR).then(function(res){
+      if (res) { res.arrayBuffer().then(function(buf){ loader.parse(buf, '', onAvatar); }); }
+      else {
+        fetch(AVATAR).then(function(r){
+          c.put(AVATAR, r.clone());
+          return r.arrayBuffer();
+        }).then(function(buf){ loader.parse(buf, '', onAvatar); })
+        .catch(loadAvatar);
       }
-    } catch(e) {}
+    }).catch(loadAvatar);
+  }).catch(loadAvatar);
+} else { loadAvatar(); }
+
+function setTalking(on){
+  talking = on;
+  if (!mixer || !talkAction) return;
+  if (on) {
+    idleAction.fadeOut(0.3);
+    talkAction.reset().fadeIn(0.3).play();
+  } else {
+    talkAction.fadeOut(0.3);
+    idleAction.reset().play();
   }
+}
 
-  // أول نقرة/لمسة بتشغّل الرسالة المعلّقة (المتصفح بمنع الصوت قبل تفاعل)
-  document.addEventListener('click', function once(){
-    if (pending) { var t = pending; pending = null; speak(t); }
-  }, { once:true });
-  document.addEventListener('touchstart', function once(){
-    if (pending) { var t = pending; pending = null; speak(t); }
-  }, { once:true });
+function tick(t){
+  if (mixer) mixer.update(1/60);
+  if (mixerEyes) mixerEyes.update(1/60);
+  if (avatar) {
+    avatar.position.y = 0 + Math.sin(t*0.0016)*0.03;
+    avatar.rotation.y = Math.sin(t*0.0004)*0.25;
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
 
-  // ---------- استقبال الرسائل من التطبيق ----------
-  var ch = new BroadcastChannel('lyal');
-  ch.onmessage = function(ev){
-    if (ev.data && ev.data.msg) speak(ev.data.msg);
-  };
+// ---------- الصوت: أنثى عربية (Google TTS) + احتياط المتصفح ----------
+const audio = new Audio();
+let pending = null;
 
-  var initial = '__MSG__';
-  if (initial) speak(initial);
-})();
+function browserFallback(text){
+  try {
+    const vs = speechSynthesis.getVoices();
+    const v = vs.filter(x => x.lang && x.lang.indexOf('ar') === 0)[0];
+    if (!v) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.voice = v; u.lang = v.lang; u.rate = 1.02;
+    u.onstart = function(){ setTalking(true); };
+    u.onend = function(){ setTalking(false); };
+    speechSynthesis.speak(u);
+  } catch(e) {}
+}
+
+function speak(text){
+  try {
+    let last = null;
+    try { last = localStorage.getItem('lyal_last'); } catch(e) {}
+    if (last === text) return;
+    try { localStorage.setItem('lyal_last', text); } catch(e) {}
+    audio.onerror = function(){ setTalking(false); browserFallback(text); };
+    audio.onended = function(){ setTalking(false); };
+    audio.onplay = function(){ setTalking(true); };
+    audio.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ar&q=' +
+                encodeURIComponent(text);
+    const p = audio.play();
+    if (p && p.catch) p.catch(function(){ setTalking(false); pending = text; });
+  } catch(e) {}
+}
+
+function tryPending(){
+  if (!pending) return;
+  const t = pending; pending = null;
+  speak(t);
+}
+
+// المستمعين على صفحة الوالد (لأن إطارنا شفاف للنقرات):
+// هيك أول نقرة بأي مكان بتشغّل الترحيب المعلّق
+try {
+  const pd = window.parent.document;
+  pd.addEventListener('click', tryPending, { passive:true });
+  pd.addEventListener('touchstart', tryPending, { passive:true });
+  pd.addEventListener('keydown', tryPending, { passive:true });
+} catch(e) {}
+
+// ---------- استقبال الرسائل من التطبيق ----------
+const ch = new BroadcastChannel('lyal');
+ch.onmessage = function(ev){
+  if (ev.data && ev.data.msg) speak(ev.data.msg);
+};
+
+const initial = '__MSG__';
+if (initial) speak(initial);
 </script>
 </body>
 </html>
