@@ -2,7 +2,7 @@
 عقار لبنان — اتجاهات أسعار السوق
 داشبورد: ملخص السوق، اتجاهات الأقضية، بحث وفلترة بالصور والتواصل، اشتراك.
 """
-import os, sys, sqlite3, base64
+import os, sys, sqlite3, base64, json
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -70,6 +70,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+tc1, tc2 = st.columns([4, 1])
+with tc1:
+    pass
+with tc2:
+    st.toggle("🎙️ ليال عم تحكي معك", value=True, key="lyal_on")
+st.caption("ليال 🦸‍♀️ مساعدتك الثلاثية الأبعاد — عائمة على يسار الشاشة، بتتكلّم باللبناني وبتوضّحلك كل خانة. تحتاج أصوات عربية مفعّلة بجهازك لسماعها.")
+
 # ---------- البطاقات ----------
 def fmt_lbp(v):
     """تنسيق الليرة اللبنانية: مليار/مليون/ألف"""
@@ -95,47 +102,55 @@ for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
 
 st.markdown("---")
 
-# ---------- إلياس 🤵: المساعد الصوتي في نموذج الإعلان ----------
+# ---------- ليال 🦸‍♀️: المساعدة الصوتية ثلاثية الأبعاد ----------
 STEP_MSG = {
-    1: "أهلًا! أنا إلياس 🤵 — بضل معك خطوة بخطوة. بدي منك: نوع العقار، القضاء، المنطقة والمساحة. أي خانة بتلمسها بشرحلك شو تحط فيها 👇",
-    2: "ممتاز! هلق السعر والتفاصيل. خلي السعر بواقعية — الناس بتفلتر عالسعر أول شي. والسعر هون **بليرة لبنانية** 💵",
-    3: "أخيراً! صورة ووصف ورقم التواصل. الصورة أقوى أداة بيع 🖼️ — ورقمك صح عشان يوصلوك.",
+    1: "أهلين! أنا ليال، مساعدتك الشخصية — بضلّك معك خطوة خطوة. أول شي: نوع العقار، القضاء، المنطقة والمساحة. أي خانة عم تلمسها، بوضّحلك شو عم تحط 👇",
+    2: "ممتاز! هلق السعر والتفاصيل. خلّي السعر عالعقل — الناس عم بتفلتر عالسعر أول شي. والسعر بليرة لبنانية 💵",
+    3: "آخر خطوة! صورة ووصف ورقم التواصل. الصورة أقوى شي للبيع 📸 — ورقمك صح عشان يوصلوك",
 }
 ASSISTANT_HELP = {
-    "pt": "الشقة الأكثر طلباً — اختر النوع الأدق لتصل أسرع للمشترين 🏢",
-    "gov": "القضاء هو محافظتك — بيظهر في مخطط الأسعار بالموقع 📍",
-    "loc": "أدق منطقة أوصل أسرع: حمانا، فردان، الجميزة... 🗺️",
-    "area": "المساحة الكلية بالمتر² — إحدى أهم خانات البحث 📐",
-    "price": "السعر بليرة لبنانية — مثال: 5 مليار تكتبها 5,000,000,000 💵",
-    "rooms": "عدد غرف النوم 🛏️",
+    "pt": "الشقة أكتر طلباً — اختر النوع الأدق لتوصل أسرع للمشترين 🏢",
+    "gov": "القضاء هو محافظتك — بيظهر بمخطط الأسعار بالموقع 📍",
+    "loc": "أدق منطقة بتوصل أسرع: حمانا، فردان، الجميزة... 🗺️",
+    "area": "المساحة الكلية بالمتر² — من أهم خانات البحث 📐",
+    "price": "السعر بليرة لبنانية — مثال: 5 مليار بتكتبها 5,000,000,000 💵",
+    "rooms": "كم غرفة نوم؟ 🛏️",
     "floor": "الطابق: 3، أرضي، آخر طابق... 🏗️",
     "furnished": "هل العقار مفروش بالأثاث؟ 🛋️",
-    "parking": "هل يوجد موقف سيارة؟ 🚗",
-    "image": "الصور ترفع نسبة التواصل كثيراً — JPG أو PNG 📸",
-    "desc": "الوصف بيفرق: إطلالة، قرب جامعات، خدمات... ✍️",
-    "name": "اسمك يظهر للمشترين — ثقة أكبر ببياناتك 👤",
+    "parking": "في موقف سيارة؟ 🚗",
+    "image": "الصور بترفع نسبة التواصل كتير — JPG أو PNG 📸",
+    "desc": "الوصف بيفرّق: إطلالة، قرب جامعات، خدمات... ✍️",
+    "name": "اسمك بيظهر للمشترين — ثقة أكتر 👤",
     "phone": "رقمك بيظهر مباشرة للمشترين — تحقق قبل النشر 📞",
 }
 
 def _assistant_say(msg):
-    """يحدّث فقاعة إلياس ويقرأ الرسالة صوتياً (مرة واحدة لكل نص)"""
+    """يحدّث رسالة ليال (تظهر في فقاعتها وتننقال صوتياً)"""
     st.session_state.assistant = msg
-    if st.session_state.get("tts_last") == msg:
-        return
-    st.session_state.tts_last = msg
-    safe = msg.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-    components.html(
-        "<script>"
-        f"try{{var u=new SpeechSynthesisUtterance('{safe}');u.lang='ar-LB';u.rate=1.02;"
-        "var vs=speechSynthesis.getVoices();"
-        "var ar=vs.filter(function(v){return v.lang&&v.lang.indexOf('ar')===0;});"
-        "if(ar.length)u.voice=ar[0];"
-        "speechSynthesis.cancel();speechSynthesis.speak(u);"
-        "}catch(e){}"
-        "</script>", height=0)
 
 def _assistant_field(key):
     st.session_state.assistant = ASSISTANT_HELP.get(key, "")
+
+def _lyal_render():
+    """يرسم ليال مرة واحدة، ويبثّ الرسائل عند تغيّرها فقط"""
+    enabled = st.session_state.get("lyal_on", True)
+    msg = st.session_state.get("assistant", STEP_MSG[1])
+    a_key = ("char", enabled)
+    if st.session_state.get("lyal_a") != a_key:
+        st.session_state.lyal_a = a_key
+        if enabled:
+            char_html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lyal.html"),
+                             encoding="utf-8").read()
+            components.html(char_html.replace("__MSG__", msg), height=520, width=268, key="lyal_char")
+        else:
+            components.html("<div></div>", height=40, width=40, key="lyal_char")
+    if enabled:
+        b_key = ("msg", msg)
+        if st.session_state.get("lyal_b") != b_key:
+            st.session_state.lyal_b = b_key
+            payload = json.dumps({"msg": msg}, ensure_ascii=False)
+            components.html(f"<script>try{{new BroadcastChannel('lyal').postMessage({payload});}}catch(e){{}}</script>",
+                            height=0, width=0, key="lyal_msg")
 
 # ---------- إضافة إعلان (معالج بخطوات) ----------
 with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات بسيطة", expanded=False):
@@ -143,15 +158,6 @@ with st.expander("➕ أضف إعلانك للبيع — بثلاث خطوات �
         st.session_state.ad_step = 1
         st.session_state.ad_data = {}
         _assistant_say(STEP_MSG[1])
-
-    # فقاعة إلياس
-    amsg = st.session_state.get("assistant") or STEP_MSG[st.session_state.ad_step]
-    a1, a2 = st.columns([1, 5], vertical_alignment="center")
-    with a1:
-        st.markdown('<div class="assistant-avatar">🤵</div>', unsafe_allow_html=True)
-    with a2:
-        st.markdown(f'<div class="assistant-bubble"><div class="assistant-name">💡 إلياس — مساعدك الشخصي</div>'
-                    f'{amsg}</div>', unsafe_allow_html=True)
 
     # شريط تقدم
     st.progress(st.session_state.ad_step / 3)
@@ -419,3 +425,6 @@ if submitted:
 st.markdown("---")
 st.caption("⚠️ الأسعار بالليرة اللبنانية كما يعلنها البائع على السوق المفتوح — للتوجيه فقط، وليست تقييماً مهنياً. "
            "الأرقام الهاتفية مقنّعة؛ الرقم الكامل من صفحة الإعلان الرسمية.")
+
+# ---------- ليال: ترسم أخيراً (تعويم يسار الشاشة) ----------
+_lyal_render()

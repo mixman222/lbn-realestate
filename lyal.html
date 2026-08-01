@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+<meta charset="utf-8">
+<style>
+html, body { margin:0; padding:0; background:transparent; overflow:hidden;
+  font-family:'Segoe UI', Tahoma, sans-serif; }
+#stage { position:fixed; left:6px; bottom:6px; width:260px; height:340px; z-index:99999; }
+#stage canvas { border-radius: 16px; }
+#bubble { position:fixed; left:14px; bottom:352px; width:252px; max-height:150px; overflow:auto;
+  background:#fff8e6; border:1.5px solid #f4a261; border-radius:14px; padding:10px 12px;
+  color:#5d4037; font-size:.9rem; z-index:99999; box-shadow:0 6px 18px rgba(0,0,0,.15);
+  line-height:1.55; }
+#name { position:fixed; left:22px; bottom:318px; z-index:99999;
+  background:linear-gradient(135deg,#e91e63,#ad1457); color:#fff; border-radius:20px;
+  padding:3px 12px; font-size:.8rem; font-weight:700; box-shadow:0 3px 8px rgba(0,0,0,.2); }
+#hint { position:fixed; left:16px; bottom:298px; z-index:99999; font-size:.68rem;
+  color:#b7791f; width:250px; }
+</style>
+</head>
+<body>
+<div id="bubble">__MSG__</div>
+<div id="name">🦸‍♀️ ليال — مساعدتك العقارية</div>
+<div id="hint">🎙️ بتتكلّم باللبناني — فعّل الأصوات العربية بجهازك</div>
+<div id="stage"></div>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+"three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const bubble = document.getElementById('bubble');
+
+// ---------- المشهد ثلاثي الأبعاد ----------
+const STAGE = document.getElementById('stage');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 260/340, 0.1, 50);
+camera.position.set(0, 0.85, 2.4);
+camera.lookAt(0, 0.85, 0);
+const renderer = new THREE.WebGLRenderer({ alpha:true, antialias:true });
+renderer.setSize(260, 340);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+STAGE.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+const dl = new THREE.DirectionalLight(0xffffff, 0.9);
+dl.position.set(1, 2, 1.5);
+scene.add(dl);
+
+const grp = new THREE.Group();
+let mixer = null;
+const loader = new GLTFLoader();
+loader.load('https://raw.githubusercontent.com/mixman222/lbn-realestate/master/models/xbot.glb', function(g){
+  grp.add(g.scene);
+  scene.add(grp);
+  if (g.animations && g.animations.length) {
+    mixer = new THREE.AnimationMixer(g.scene);
+    const names = g.animations.map(a => a.name);
+    const pick = names.indexOf('Idle') >= 0 ? 'Idle'
+               : (names.indexOf('Wave') >= 0 ? 'Wave' : g.animations[0].name);
+    const clip = THREE.AnimationClip.findByName(g, pick) || g.animations[0];
+    mixer.clipAction(clip).play();
+  }
+});
+
+function tick(t){
+  if (mixer) mixer.update(0.016);
+  grp.position.y = 0 + Math.sin(t*0.002)*0.05;
+  grp.rotation.y = Math.sin(t*0.0006)*0.35;
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// ---------- إطالة الـ iframe ليعوم على يسار الشاشة ----------
+if (window.frameElement) {
+  const f = window.frameElement;
+  f.style.position = 'fixed';
+  f.style.left = '4px';
+  f.style.bottom = '4px';
+  f.style.width = '268px';
+  f.style.height = '520px';
+  f.style.zIndex = '99998';
+  f.style.border = 'none';
+  f.style.background = 'transparent';
+  f.style.pointerEvents = 'none';
+}
+
+// ---------- النطق باللبناني ----------
+let voice = null;
+function pickVoice(){
+  const vs = speechSynthesis.getVoices();
+  voice = vs.filter(v => v.lang && v.lang.indexOf('ar-LB') === 0)
+            .concat(vs.filter(v => v.lang && v.lang.indexOf('ar') === 0))[0] || null;
+}
+pickVoice();
+speechSynthesis.addEventListener('voiceschanged', pickVoice);
+
+function speak(text){
+  try {
+    if (!voice) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.voice = voice;
+    u.lang = voice.lang;
+    u.rate = 1.03;
+    speechSynthesis.speak(u);
+  } catch(e) {}
+}
+
+// ---------- استقبال الرسائل من التطبيق ----------
+const ch = new BroadcastChannel('lyal');
+ch.onmessage = function(ev){
+  if (ev.data && ev.data.msg) {
+    bubble.textContent = ev.data.msg;
+    speak(ev.data.msg);
+  }
+};
+
+speak(bubble.textContent);
+</script>
+</body>
+</html>
