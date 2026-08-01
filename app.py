@@ -2,7 +2,7 @@
 عقار لبنان — اتجاهات أسعار السوق
 داشبورد: ملخص السوق، اتجاهات الأقضية، بحث وفلترة بالصور والتواصل، اشتراك.
 """
-import os, sys, sqlite3
+import os, sys, sqlite3, base64
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -188,9 +188,17 @@ try:
             with st.container(border=True):
                 ci, ct, cp = st.columns([1, 2.4, 1])
                 with ci:
-                    if pd.notna(r['image_path']) and os.path.exists(r['image_path']):
+                    img_src = None
+                    if pd.notna(r.get('image_b64')) and str(r['image_b64']).strip():
                         try:
-                            st.image(r['image_path'], use_container_width=True)
+                            img_src = base64.b64decode(r['image_b64'])
+                        except Exception:
+                            pass
+                    elif pd.notna(r.get('image_path')) and os.path.exists(str(r['image_path'])):
+                        img_src = r['image_path']
+                    if img_src is not None:
+                        try:
+                            st.image(img_src, use_container_width=True)
                         except Exception:
                             pass
                     else:
