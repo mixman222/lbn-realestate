@@ -55,14 +55,21 @@ def normalize(df, lbp_rate=15000.0):
     df['price_usd'] = df['price_lbp'] / lbp_rate
     # سعر المتر²
     df['price_per_m2'] = df['price_usd'] / df['area']
+    # سعر المتر² بالليرة مباشرة (بدون أي تحويل)
+    df['lbp_per_m2'] = df['price_lbp'] / df['area']
     # توحيد أسماء المدن
     df['city_ar'] = df['city'].astype(str).str.strip().str.lower().map(CITY_AR)
     df['city_ar'] = df['city_ar'].fillna(df['city'].astype(str)).fillna("غير محدد")
     # القضاء من الموقع (الحي)
     df['governorate'] = df['location'].astype(str).str.strip().str.lower().map(LOCATION_MAP)
     df['governorate'] = df['governorate'].fillna(df['city_ar']).fillna("غير محدد")
-    # تصفية القيم الشاذة: سعر المتر² خارج [50, 20000] يعتبر خطأ
-    mask = (df['price_per_m2'] > 50) & (df['price_per_m2'] < 20000)
+    # إزالة تكرار العقار نفسه: نفس البائع + السعر + المساحة (يبقى الأحدث)
+    if 'seller' in df.columns:
+        before = len(df)
+        df = df.sort_values('first_seen', ascending=False)
+        df = df.drop_duplicates(subset=['seller', 'price_lbp', 'area'], keep='first')
+    # تصفية القيم الشاذة: سعر المتر² خارج [10, 30000] يعتبر خطأ (10$ تحفظ أراضي عكار الرخيصة الحقيقية)
+    mask = (df['price_per_m2'] > 10) & (df['price_per_m2'] < 30000)
     df = df[mask]
     # التاريخ
     df['date_posted'] = pd.to_datetime(df['date_posted'], format='%d-%m-%Y', errors='coerce')

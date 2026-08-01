@@ -256,6 +256,14 @@ def scrape_listing_page(url, conn):
             if f['price_lbp'] is None:
                 continue
             try:
+                # منع تكرار العقار نفسه: نفس البائع + السعر + المساحة بإعلان جديد = نفس العقار
+                if f['seller'] and f['area']:
+                    dup = conn.execute(
+                        "SELECT id FROM listings WHERE seller=? AND price_lbp=? AND area=? AND url!=? LIMIT 1",
+                        (f['seller'], f['price_lbp'], f['area'], f['url'])).fetchone()
+                    if dup:
+                        conn.execute("UPDATE listings SET last_seen=? WHERE id=?", (now, dup[0]))
+                        continue
                 conn.execute("""
                     INSERT OR IGNORE INTO listings
                     (url, title, price_lbp, price_usd, area, rooms, location, city, prop_type,

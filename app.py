@@ -40,10 +40,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-lbp_rate = st.sidebar.number_input("سعر صرف الليرة للدولار", min_value=10000.0, max_value=150000.0,
-                                   value=15000.0, step=1000.0,
-                                   help="السوق المفتوح يعرض بالليرة بسعر رسمي 15000 — نعرضها بالدولار")
-
+# الأسعار تُعرض بالليرة اللبنانية كما يعلنها البائع مباشرة — بدون تحويلات
 @st.cache_data(ttl=3600)
 def load_data():
     return normalize(load_listings())
@@ -64,12 +61,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------- البطاقات ----------
+def fmt_lbp(v):
+    """تنسيق الليرة اللبنانية: مليار/مليون/ألف"""
+    if v >= 1e9:
+        return f"{v/1e9:.2f} مليار ل.ل"
+    if v >= 1e6:
+        return f"{v/1e6:.1f} مليون ل.ل"
+    if v >= 1e3:
+        return f"{v/1e3:.0f} ألف ل.ل"
+    return f"{v:,.0f} ل.ل"
+
 c1, c2, c3, c4 = st.columns(4)
 cards = [
     ("📊 إعلانات مراقبة", f"{len(df):,}"),
     ("🏘️ أقضية مغطاة", f"{df['governorate'].nunique()}"),
-    ("💵 متوسط سعر المتر²", f"{df['price_per_m2'].median():,.0f}$"),
-    ("🏠 متوسط سعر العقار", f"{df['price_usd'].median():,.0f}$"),
+    ("💵 متوسط سعر المتر²", fmt_lbp(df['lbp_per_m2'].median())),
+    ("🏠 متوسط سعر العقار", fmt_lbp(df['price_lbp'].median())),
 ]
 for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
     with col:
@@ -79,17 +86,17 @@ for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
 st.markdown("---")
 
 # ---------- اتجاهات السعر ----------
-st.subheader("📈 متوسط سعر المتر² حسب القضاء")
+st.subheader("📈 متوسط سعر المتر² حسب القضاء (ل.ل)")
 g = (df.groupby('governorate')
-       .agg(متوسط=('price_per_m2', 'median'), عدد=('id', 'count'))
+       .agg(متوسط=('lbp_per_m2', 'median'), عدد=('id', 'count'))
        .reset_index().sort_values('متوسط'))
 fig = go.Figure(go.Bar(
     x=g['متوسط'], y=g['governorate'], orientation='h',
-    text=[f"{v:,.0f}$" for v in g['متوسط']], textposition='outside',
+    text=[fmt_lbp(v) for v in g['متوسط']], textposition='outside',
     marker=dict(color=g['متوسط'], colorscale='Tealgrn'),
 ))
 fig.update_layout(height=480, margin=dict(l=10, r=60, t=10, b=10),
-                  xaxis_title="دولار/م²", yaxis_title="", showlegend=False,
+                  xaxis_title="ليرة/م²", yaxis_title="", showlegend=False,
                   font=dict(size=13))
 st.plotly_chart(fig, use_container_width=True)
 
@@ -126,11 +133,11 @@ if max_price > 0:
 if sort_by == "الأحدث":
     f = f.sort_values('date_posted', ascending=False, na_position='last')
 elif sort_by == "السعر من الأقل":
-    f = f.sort_values('price_usd')
+    f = f.sort_values('price_lbp')
 elif sort_by == "السعر من الأعلى":
-    f = f.sort_values('price_usd', ascending=False)
+    f = f.sort_values('price_lbp', ascending=False)
 else:
-    f = f.sort_values('price_per_m2')
+    f = f.sort_values('lbp_per_m2')
 
 st.caption(f"عرض {min(len(f), 30)} من {len(f):,} إعلان")
 
@@ -170,9 +177,9 @@ for _, r in f.head(30).iterrows():
             st.markdown(f'<a class="cta-btn" href="https://lb.opensooq.com{r["url"]}" target="_blank">عرض الإعلان كاملاً — كشف رقم الهاتف</a>',
                         unsafe_allow_html=True)
         with col_price:
-            st.markdown(f'<div class="price-big">{r["price_usd"]:,.0f}$</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}</div>', unsafe_allow_html=True)
             if pd.notna(r['area']) and r['area'] > 0:
-                st.markdown(f'<div class="muted">{r["price_per_m2"]:,.0f}$/م²</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="muted">{fmt_lbp(r["lbp_per_m2"])}/م²</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -202,5 +209,5 @@ if submitted:
         st.error("يرجى إدخال بريد إلكتروني صحيح.")
 
 st.markdown("---")
-st.caption("⚠️ الأسعار تقريبية مبنية على إعلانات السوق المفتوح — للتوجيه فقط، وليست تقييماً مهنياً. "
-           "الأرقام الهاتفية مقنّعة؛ رقمك الكامل من صفحة الإعلان الرسمية.")
+st.caption("⚠️ الأسعار بالليرة اللبنانية كما يعلنها البائع على السوق المفتوح — للتوجيه فقط، وليست تقييماً مهنياً. "
+           "الأرقام الهاتفية مقنّعة؛ الرقم الكامل من صفحة الإعلان الرسمية.")
