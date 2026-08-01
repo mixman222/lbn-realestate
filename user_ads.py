@@ -9,14 +9,30 @@ from datetime import datetime
 import requests
 import pandas as pd
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
-
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_ads.db")
 IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_ads_images")
 
+def _secret(name):
+    """مفتاح من البيئة أو st.secrets (أساسي أو داخل قسم brevo)"""
+    v = os.environ.get(name)
+    if v:
+        return v
+    try:
+        import streamlit as st
+        if name in st.secrets:
+            return st.secrets[name]
+        brevo = st.secrets.get("brevo", {})
+        if name in brevo:
+            return brevo[name]
+    except Exception:
+        pass
+    return ""
+
+def _cloud():
+    return _secret("SUPABASE_URL"), _secret("SUPABASE_ANON_KEY")
+
 def _headers():
-    return {"apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY,
+    return {"apikey": _cloud()[1], "Authorization": "Bearer " + _cloud()[1],
             "Content-Type": "application/json"}
 
 # ---------- محلي (احتياط) ----------
@@ -63,10 +79,11 @@ def _load_local():
 
 # ---------- سحابي ----------
 def _add_cloud(data, image_b64):
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    url, key = _cloud()
+    if not url or not key:
         return None
     row = {**data, 'image_b64': image_b64}
-    r = requests.post(f"{SUPABASE_URL}/rest/v1/user_ads",
+    r = requests.post(f"{url}/rest/v1/user_ads",
                       headers={**_headers(), "Prefer": "return=representation"},
                       json=row, timeout=20)
     if r.status_code in (200, 201):
@@ -75,9 +92,10 @@ def _add_cloud(data, image_b64):
     return None
 
 def _load_cloud():
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    url, key = _cloud()
+    if not url or not key:
         return None
-    r = requests.get(f"{SUPABASE_URL}/rest/v1/user_ads?select=*&order=id.desc",
+    r = requests.get(f"{url}/rest/v1/user_ads?select=*&order=id.desc",
                      headers=_headers(), timeout=20)
     if r.status_code != 200:
         return None

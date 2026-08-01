@@ -11,21 +11,43 @@ from email.mime.multipart import MIMEMultipart
 import requests
 
 API_URL = "https://api.brevo.com/v3"
-LIST_ID = int(os.environ.get("BREVO_LIST_ID", "3"))
+
+def _secret(name):
+    """مفتاح من البيئة أو st.secrets (أساسي أو داخل قسم brevo)"""
+    v = os.environ.get(name)
+    if v:
+        return v
+    try:
+        import streamlit as st
+        if name in st.secrets:
+            return st.secrets[name]
+        brevo = st.secrets.get("brevo", {})
+        if name in brevo:
+            return brevo[name]
+    except Exception:
+        pass
+    return ""
 
 def _headers():
-    key = os.environ.get("BREVO_API_KEY", "")
+    key = _secret("BREVO_API_KEY")
     return {"api-key": key, "Content-Type": "application/json"}
+
+def _list_id():
+    try:
+        return int(_secret("BREVO_LIST_ID") or "3")
+    except ValueError:
+        return 3
 
 def add_subscriber(email, role="غير ذلك"):
     """يضيف أو يحدّث مشتركاً في القائمة — يرجع (نجاح، رسالة)"""
-    key = os.environ.get("BREVO_API_KEY", "")
+    key = _secret("BREVO_API_KEY")
     if not key:
         return False, "لا يوجد مفتاح Brevo"
     try:
+        lid = _list_id()
         r = requests.put(f"{API_URL}/contacts/{email.lower()}",
                          headers=_headers(),
-                         json={"email": email.lower(), "listIds": [LIST_ID],
+                         json={"email": email.lower(), "listIds": [lid],
                                "attributes": {"ROLE": role}},
                          timeout=15)
         if r.status_code in (200, 201, 204):
@@ -33,7 +55,7 @@ def add_subscriber(email, role="غير ذلك"):
         if r.status_code == 404:
             r2 = requests.post(f"{API_URL}/contacts",
                                headers=_headers(),
-                               json={"email": email.lower(), "listIds": [LIST_ID],
+                               json={"email": email.lower(), "listIds": [lid],
                                      "attributes": {"ROLE": role}},
                                timeout=15)
             if r2.status_code in (200, 201):
@@ -45,13 +67,14 @@ def add_subscriber(email, role="غير ذلك"):
 
 def get_subscribers():
     """كل إيميلات المشتركين في القائمة"""
-    key = os.environ.get("BREVO_API_KEY", "")
+    key = _secret("BREVO_API_KEY")
     if not key:
         return []
     emails = []
     offset = 0
     while True:
-        r = requests.get(f"{API_URL}/contacts/lists/{LIST_ID}/contacts",
+        lid = _list_id()
+        r = requests.get(f"{API_URL}/contacts/lists/{lid}/contacts",
                          headers=_headers(),
                          params={"limit": 500, "offset": offset}, timeout=15)
         if r.status_code != 200:
@@ -66,9 +89,9 @@ def get_subscribers():
 
 def send_email(to_emails, subject, html_body):
     """يرسل عبر SMTP Brevo — bcc لكل المشتركين"""
-    smtp_user = os.environ.get("BREVO_SMTP_USER", "b40b0e001@smtp-brevo.com")
-    smtp_key = os.environ.get("BREVO_SMTP_KEY", "")
-    sender = os.environ.get("BREVO_SENDER", "mixman222@gmail.com")
+    smtp_user = _secret("BREVO_SMTP_USER") or "b40b0e001@smtp-brevo.com"
+    smtp_key = _secret("BREVO_SMTP_KEY")
+    sender = _secret("BREVO_SENDER") or "mixman222@gmail.com"
     if not smtp_key:
         return False, "لا يوجد مفتاح SMTP"
     msg = MIMEMultipart("alternative")
