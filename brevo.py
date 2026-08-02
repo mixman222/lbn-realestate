@@ -2,12 +2,10 @@
 ربط Brevo (الإرسال وقائمة المشتركين):
 - add_subscriber: يضيف المشترك لقائمة Weekly Report
 - get_subscribers: يجلب قائمة المشتركين
-- send_email: إرسال عبر SMTP Brevo
+- send_email: إرسال عبر API المعاملات (لا يحتاج تفعيل SMTP)
 المفاتيح من متغيرات البيئة (لا تخزن في الكود)
 """
-import os, smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import os
 import requests
 
 API_URL = "https://api.brevo.com/v3"
@@ -88,23 +86,28 @@ def get_subscribers():
     return emails
 
 def send_email(to_emails, subject, html_body):
-    """يرسل عبر SMTP Brevo — bcc لكل المشتركين"""
-    smtp_user = _secret("BREVO_SMTP_USER") or "b40b0e001@smtp-brevo.com"
-    smtp_key = _secret("BREVO_SMTP_KEY")
+    """يرسل عبر API المعاملات (sendTransacEmail) — bcc لكل المشتركين، بدون حاجة لتفعيل SMTP"""
+    key = _secret("BREVO_API_KEY")
+    if not key:
+        return False, "لا يوجد مفتاح API"
     sender = _secret("BREVO_SENDER") or "mixman222@gmail.com"
-    if not smtp_key:
-        return False, "لا يوجد مفتاح SMTP"
-    msg = MIMEMultipart("alternative")
-    msg["From"] = f"عقار لبنان <{sender}>"
-    msg["To"] = sender
-    msg["Subject"] = subject
-    msg["Bcc"] = ", ".join(to_emails)
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
-    try:
-        with smtplib.SMTP("smtp-relay.brevo.com", 587, timeout=30) as s:
-            s.starttls()
-            s.login(smtp_user, smtp_key)
-            s.send_message(msg)
-        return True, f"أُرسل إلى {len(to_emails)} مشترك"
-    except Exception as e:
-        return False, str(e)
+    emails = list(to_emails)
+    sent = 0
+    for i in range(0, len(emails), 50):
+        batch = emails[i:i + 50]
+        try:
+            r = requests.post(f"{API_URL}/smtp/email", headers=_headers(), json={
+                "sender": {"email": sender, "name": "عقار لبنان"},
+                "to": [{"email": sender}],
+                "bcc": [{"email": e} for e in batch],
+                "subject": subject,
+                "htmlContent": html_body,
+            }, timeout=30)
+            if r.status_code in (200, 201):
+                sent += len(batch)
+                continue
+            detail = r.text[:200] if r.text else ""
+            return False, f"API فشل ({r.status_code}): {detail}"
+        except Exception as e:
+            return False, str(e)
+    return True, f"أُرسل إلى {sent} مشترك"
