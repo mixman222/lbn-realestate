@@ -227,7 +227,13 @@ st.markdown("""
 # ---------- البيانات ----------
 @st.cache_data(ttl=3600)
 def load_data():
-    return normalize(load_listings())
+    df = normalize(load_listings())
+    if not df.empty:
+        # حماية من التخزين المؤقت/الحالة القديمة: ضمان الأعمدة المشتقة
+        for col in ('price_period', 'monthly_m2'):
+            if col not in df.columns:
+                df[col] = 'month' if col == 'price_period' else df['price_per_m2']
+    return df
 
 df = load_data()
 
