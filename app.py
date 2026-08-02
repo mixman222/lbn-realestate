@@ -103,7 +103,6 @@ st.markdown("""
               gap: 16px; flex-wrap: wrap; }
     .brand { font-size: 1.5rem; font-weight: 800; color: #0f2027; }
     .brand span { color: #2a9d8f; }
-    .topbar .tagline { color: #6b7280; font-size: 0.9rem; margin-top: 4px; }
     .chips { display: flex; gap: 14px; flex-wrap: wrap; }
     .chip { background: #f0fdf9; border: 1px solid #bfe8df; color: #147d64;
             border-radius: 999px; padding: 9px 18px; font-size: 0.95rem; font-weight: 700;
@@ -122,6 +121,17 @@ st.markdown("""
     div[role="radiogroup"] label p { font-weight: 700; }
     div[role="radiogroup"] label[style*="flexDirection:column"],
     div[role="radiogroup"] div[style*="flex-direction: column"] { width: 100%; }
+
+    /* ---------- زر النشر المميز (CTA) ---------- */
+    div[data-testid="stBaseButton-primary"] button {
+        background: linear-gradient(135deg, #1f6f8b 0%, #2a9d8f 100%) !important;
+        color: #fff !important; border: none !important; border-radius: 14px !important;
+        padding: 20px 14px !important; font-size: 1.18rem !important; font-weight: 800 !important;
+        min-height: 72px !important; white-space: normal !important;
+        box-shadow: 0 8px 20px rgba(42,157,143,.3) !important; }
+    div[data-testid="stBaseButton-primary"] button:hover {
+        background: linear-gradient(135deg, #17576f 0%, #23897d 100%) !important;
+        box-shadow: 0 10px 24px rgba(42,157,143,.4) !important; }
 
     /* ---------- البطاقات ---------- */
     .kpi-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
@@ -221,10 +231,7 @@ n_total = len(df) if not df.empty else 0
 n_gov = df['governorate'].nunique() if not df.empty else 0
 st.markdown(f"""
 <div class="topbar">
-  <div>
-    <div class="brand">عقار <span>لبنان</span></div>
-    <div class="tagline">الوجهة الأولى لسوق العقارات اللبناني — بيانات يومية، شفافية كاملة، بلا وسطاء.</div>
-  </div>
+  <div class="brand">عقار <span>لبنان</span></div>
   <div class="chips">
     <span class="chip">📊 {n_total:,} إعلان مُراقَب</span>
     <span class="chip">📍 {n_gov} قضاء</span>
@@ -234,13 +241,25 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------- اختيار الدور ----------
-ROLES = {
-    "🏠 شراء": "buy",
-    "🔑 إيجار": "rent",
-    "📈 استثمار": "invest",
-    "📤 انشر عقارك": "post",
-}
-role = st.radio("", list(ROLES.keys()), label_visibility="collapsed", key="role")
+ROLES = {"🏠 شراء": "buy", "🔑 إيجار": "rent", "📈 استثمار": "invest"}
+ROLE_LABELS = list(ROLES.keys())
+if "role" not in st.session_state:
+    st.session_state.role = "🏠 شراء"
+c_roles, c_post = st.columns([2, 1], vertical_alignment="center")
+with c_roles:
+    idx = ROLE_LABELS.index(st.session_state.role) if st.session_state.role in ROLE_LABELS else None
+    sel = st.radio("", ROLE_LABELS, index=idx, label_visibility="collapsed",
+                   key="role_browse" if st.session_state.role != "post" else "role_browse_post")
+    if sel is not None and sel != st.session_state.role:
+        st.session_state.role = sel
+        st.rerun()
+with c_post:
+    if st.button("📤 انشر عقارك", key="role_post", type="primary",
+                 use_container_width=True):
+        st.session_state.role = "post"
+        st.rerun()
+    st.caption("حر — يصل لآلاف الزوار")
+role = st.session_state.role
 
 sale = df[df['listing_type'] == 'sale'] if not df.empty else df
 rent = df[df['listing_type'] == 'rent'] if not df.empty else df
