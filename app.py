@@ -17,7 +17,8 @@ st.set_page_config(page_title="عقار لبنان — منصة العقارات
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-    .stApp { direction: rtl; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; }
+    .stApp { direction: rtl; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+             background: #f1f3f6; }
     .block-container { padding-top: 1rem; max-width: 1180px; }
     h1, h2, h3 { font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; }
 
@@ -97,6 +98,10 @@ st.markdown("""
     div[data-testid="stSelectbox"]:focus-within div[data-baseweb="select"] > div {
         border-color: #2a9d8f !important; box-shadow: 0 0 0 3px rgba(42,157,143,.15) !important; }
     div[data-testid="stRadio"] label { font-size: 1.02rem !important; font-weight: 600 !important; }
+    div[data-testid="stRadio"] label:has(input:checked) { background: #f0fdf9 !important;
+        border: 1.5px solid #2a9d8f !important; border-radius: 10px !important; }
+    div[data-testid="stRadio"] input[type="radio"] { width: 24px !important; height: 24px !important;
+        accent-color: #2a9d8f !important; cursor: pointer !important; }
     div[data-testid="stFileUploader"] section { border-radius: 12px !important; }
     div[data-testid="stFileUploader"] button { font-size: 1.02rem !important; }
     div[data-testid="stButton"] button { font-size: 1.05rem !important; font-weight: 700 !important;
