@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mixman222.github.io/lbn-realestate/sitemap.xml
