@@ -112,14 +112,16 @@ st.markdown("""
     /* ---------- أزرار الأدوار ---------- */
     div[role="radiogroup"] { gap: 10px; }
     div[role="radiogroup"] label { background: #f9fafb; border: 1.5px solid #e5e7eb;
-        border-radius: 14px; padding: 14px 20px; flex: 1; text-align: center;
-        font-weight: 700; font-size: 1.02rem; color: #374151; cursor: pointer;
-        transition: all .15s ease; }
+        border-radius: 14px; padding: 16px 20px; flex: 1 1 auto; min-width: max-content;
+        text-align: center; font-weight: 700; font-size: 1.08rem; color: #374151;
+        cursor: pointer; transition: all .15s ease; white-space: normal; }
     div[role="radiogroup"] label:hover { border-color: #2a9d8f; background: #f0fdf9; }
     div[role="radiogroup"] label:has(input:checked) { border-color: #2a9d8f;
         background: linear-gradient(135deg, #1f6f8b 0%, #2a9d8f 100%); color: #fff;
         box-shadow: 0 6px 16px rgba(42,157,143,.25); }
     div[role="radiogroup"] label p { font-weight: 700; }
+    div[role="radiogroup"] label[style*="flexDirection:column"],
+    div[role="radiogroup"] div[style*="flex-direction: column"] { width: 100%; }
 
     /* ---------- البطاقات ---------- */
     .kpi-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
@@ -174,7 +176,8 @@ st.markdown("""
         border: 2px solid #cbd5e1 !important; font-size: 1.05rem !important; }
     div[data-testid="stSelectbox"]:focus-within div[data-baseweb="select"] > div {
         border-color: #2a9d8f !important; box-shadow: 0 0 0 3px rgba(42,157,143,.15) !important; }
-    div[data-testid="stRadio"] label { font-size: 1.02rem !important; font-weight: 600 !important; }
+    div[data-testid="stRadio"] label { font-size: 1.08rem !important; font-weight: 600 !important;
+        padding: 10px 14px !important; border-radius: 12px !important; }
     div[data-testid="stRadio"] label:has(input:checked) { background: #f0fdf9 !important;
         border: 1.5px solid #2a9d8f !important; border-radius: 10px !important; }
     div[data-testid="stRadio"] input[type="radio"] { width: 24px !important; height: 24px !important;
@@ -237,7 +240,7 @@ ROLES = {
     "📈 استثمار": "invest",
     "📤 انشر عقارك": "post",
 }
-role = st.radio("", list(ROLES.keys()), horizontal=True, label_visibility="collapsed", key="role")
+role = st.radio("", list(ROLES.keys()), label_visibility="collapsed", key="role")
 
 sale = df[df['listing_type'] == 'sale'] if not df.empty else df
 rent = df[df['listing_type'] == 'rent'] if not df.empty else df
