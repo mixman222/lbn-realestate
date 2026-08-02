@@ -103,6 +103,12 @@ st.markdown("""
               gap: 16px; flex-wrap: wrap; }
     .brand { font-size: 1.5rem; font-weight: 800; color: #0f2027; }
     .brand span { color: #2a9d8f; }
+    .slogan { text-align: center; font-size: clamp(1.25rem, 2.6vw, 1.65rem); font-weight: 800;
+              margin: 2px 0 16px 0; line-height: 1.5;
+              background: linear-gradient(135deg, #1f6f8b 0%, #2a9d8f 55%, #38b09f 100%);
+              -webkit-background-clip: text; background-clip: text; color: transparent;
+              text-shadow: 0 2px 14px rgba(42, 157, 143, .15); }
+    .slogan .dot { color: #ffb703; -webkit-text-fill-color: #ffb703; }
     .chips { display: flex; gap: 14px; flex-wrap: wrap; }
     .chip { background: #f0fdf9; border: 1px solid #bfe8df; color: #147d64;
             border-radius: 999px; padding: 9px 18px; font-size: 0.95rem; font-weight: 700;
@@ -258,6 +264,7 @@ st.markdown(f"""
     <span class="chip">🔄 تحديث يومي</span>
   </div>
 </div>
+<div class="slogan">💎 جميع الإعلانات في موقع واحد<span class="dot">.</span></div>
 """, unsafe_allow_html=True)
 
 # ---------- اختيار الدور ----------
