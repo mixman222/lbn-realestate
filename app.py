@@ -487,9 +487,58 @@ def _search_locations(searchterm):
             for en, ar in loc_suggestions(term)]
 
 def post_panel():
-    """لوحة البائع/المالك: اختيار نوع العرض + النشر بثلاث خطوات + إعلانات المستخدمين"""
+    """لوحة البائع/المالك: حساب بسيط + النشر بثلاث خطوات + إدارة إعلاناتي"""
+    import user_ads
     st.markdown('<div class="section-title">📤 انشر عقارك — يصل مباشرة لآلاف الزوار</div>',
                 unsafe_allow_html=True)
+
+    if "session_user" not in st.session_state:
+        st.caption("النشر بحساب بسيط (اسم + هاتف + كلمة سر) — دقيقة واحدة، وتستطيع تعديل إعلاناتك وحذفها متى شئت.")
+        auth_mode = st.radio("", ["تسجيل الدخول", "حساب جديد"], horizontal=True, key="auth_mode")
+        if auth_mode == "حساب جديد":
+            st.subheader("✨ حساب جديد")
+            rname = st.text_input("اسمك", key="reg_name")
+            rphone = st.text_input("رقم الهاتف", key="reg_phone", placeholder="70 123 456")
+            rpass = st.text_input("كلمة السر (٤ أحرف على الأقل)", type="password", key="reg_pass")
+            if st.button("إنشاء الحساب", use_container_width=True):
+                u, err = user_ads.register(rname, rphone, rpass)
+                if err:
+                    st.error(err)
+                else:
+                    st.session_state.session_user = u
+                    st.session_state.flash_msg = f"أهلاً {u['name']} — الحساب جاهز، انشر إعلانك الآن."
+                    st.rerun()
+        else:
+            st.subheader("🔐 تسجيل الدخول")
+            lphone = st.text_input("رقم الهاتف", key="log_phone")
+            lpass = st.text_input("كلمة السر", type="password", key="log_pass")
+            if st.button("تسجيل الدخول", use_container_width=True):
+                u = user_ads.login(lphone, lpass)
+                if u:
+                    st.session_state.session_user = u
+                    st.rerun()
+                else:
+                    st.error("الرقم أو كلمة السر غير صحيحة — أو أنشئ حساباً جديداً.")
+        st.markdown('<div class="field-hint">💡 الحساب يحميك ويساعدك بإدارة إعلاناتك:'
+                    ' <b>تعديل</b> و<b>حذف</b> متى شئت، وإعلانك يبقى مرتبطاً بك ولا يقدر أحد غيره تغييره.</div>',
+                    unsafe_allow_html=True)
+        return
+
+    u = st.session_state.session_user
+    c_head, c_out = st.columns([5, 1])
+    with c_head:
+        st.markdown(f'<div class="section-title">👤 مرحباً {u["name"]}</div>',
+                    unsafe_allow_html=True)
+        st.caption(f"الهاتف: {u['phone']}")
+    with c_out:
+        if st.button("🚪 خروج", key="logout"):
+            del st.session_state.session_user
+            st.rerun()
+
+    flash = st.session_state.pop("flash_msg", None)
+    if flash:
+        st.success(flash)
+
     st.caption("ثلاث خطوات بسيطة: أساسيات العقار ← السعر والتفاصيل ← الصور وبيانات التواصل. "
                "إعلانك يظهر فوراً في هذه الصفحة.")
     deal_type = st.radio("نوع العرض", ["للبيع", "للإيجار"], horizontal=True, key="deal_type",
@@ -601,22 +650,60 @@ def post_panel():
                 if not name.strip() or not phone.strip():
                     st.warning("أدخل اسمك ورقم هاتفك.")
                 else:
-                    import user_ads
                     ad = {**st.session_state.ad_data,
                           'description': desc.strip(), 'name': name.strip(), 'phone': phone.strip()}
                     ad_id = user_ads.add_ad(ad,
                                             img.getvalue() if img else None,
-                                            img.name.split('.')[-1] if img else None)
-                    st.success(f"تم نشر إعلانك (#{ad_id}) — يظهر الآن في قسم إعلانات المستخدمين.")
+                                            img.name.split('.')[-1] if img else None,
+                                            user_id=u['id'])
+                    st.session_state.flash_msg = (f"تم نشر إعلانك (#{ad_id}) — يظهر الآن "
+                                                  "في قسم إعلانات المستخدمين وإعلاناتي.")
                     st.session_state.ad_step = 1
                     st.session_state.ad_data = {}
                     st.rerun()
 
     st.markdown("---")
 
+    # ---------- إعلاناتي: تعديل وحذف ----------
+    st.markdown('<div class="section-title">📋 إعلاناتي — تعديل وحذف</div>', unsafe_allow_html=True)
+    mine = user_ads.list_user_ads(u['id'])
+    if mine is None or mine.empty:
+        st.caption("لا إعلانات بعد — انشر أول إعلان من المعالج أعلاه.")
+    else:
+        for _, row in mine.iterrows():
+            with st.expander(f"#{row['id']} — {row['prop_type']} في {row['location']}"
+                             f" ({row.get('deal_type') or 'للبيع'})"):
+                price_val = int(row['price_lbp'] / 15000) if row.get('price_lbp') else 0
+                new_price = st.number_input("السعر ($)", min_value=0, value=price_val,
+                                            step=10_000, key=f"ep_{row['id']}_{row.get('_src', '')}")
+                new_desc = st.text_area("الوصف", value=row.get('description') or '',
+                                        key=f"ed_{row['id']}_{row.get('_src', '')}")
+                c_save, c_del = st.columns(2)
+                with c_save:
+                    if st.button("💾 حفظ التعديلات", key=f"eu_{row['id']}_{row.get('_src', '')}",
+                                 use_container_width=True):
+                        ok = user_ads.update_ad(str(row['id']), u['id'],
+                                                {'price_lbp': new_price * 15000,
+                                                 'description': new_desc})
+                        if ok:
+                            st.session_state.flash_msg = "تم حفظ التعديلات."
+                            st.rerun()
+                        else:
+                            st.error("تعذّر الحفظ — تأكد أنك مالك الإعلان.")
+                with c_del:
+                    if st.button("🗑️ حذف الإعلان", key=f"dx_{row['id']}_{row.get('_src', '')}",
+                                 use_container_width=True):
+                        ok = user_ads.delete_ad(str(row['id']), u['id'])
+                        if ok:
+                            st.session_state.flash_msg = "تم حذف الإعلان."
+                            st.rerun()
+                        else:
+                            st.error("تعذّر الحذف — تأكد أنك مالك الإعلان.")
+
+    st.markdown("---")
+
     # ---------- إعلانات المستخدمين ----------
     try:
-        import user_ads
         uads = user_ads.load_ads()
         if not uads.empty:
             if 'deal_type' not in uads.columns:
