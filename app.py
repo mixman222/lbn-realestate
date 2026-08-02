@@ -34,6 +34,53 @@ def known_locations():
         pass
     return sorted(locs) if locs else ["بيروت", "حمانا", "فردان", "الجميزة", "انطلياس"]
 
+LOC_ALIASES = {
+    'الأشرفية': 'Achrafieh', 'حمانا': 'Hammana', 'فردان': 'Verdun',
+    'الجميزة': 'Gemmayze', 'البدارو': 'Badaro', 'فرن الشباك': 'Furn El Chebbak',
+    'الحازمية': 'Hazmiyeh', 'رأس بيروت': 'Ras Beirut', 'المصيطبة': 'Msaytbeh',
+    'الرملة البيضا': 'Ramleh Al-Bayda', 'طريق الجديدة': 'Tariq Al-Jadideh',
+    'كفرشيما': 'Kfarshima', 'الشويفات': 'Chouaifet', 'الغبيري': 'Ghobeiry',
+    'الشياح': 'Chiyah', 'حارة حريك': 'Haret Hreik', 'عين الرمانة': 'Ain El Remmaneh',
+    'كاسليك': 'Kaslik', 'جونية': 'Jounieh', 'جبيل': 'Jbeil',
+    'انطلياس': 'Antelias', 'جل الديب': 'Jal El Dib', 'البوشرية': 'Baouchrieh',
+    'سن الفيل': 'Sin El Fil', 'فنار': 'Fanar', 'زركة': 'Zalka',
+    'بعبدا': 'Baabda', 'برمانا': 'Broummana', 'بكفيا': 'Bikfaya',
+    'بيت مري': 'Beit Meri', 'عاليه': 'Aley', 'بحمدون': 'Bhamdoun',
+    'بشامون': 'Bchamoun', 'الرابية': 'Rabieh', 'عين سعادة': 'Ain Saadeh',
+    'مار إلياس': 'Mar Elias', 'صيدا': 'Saida', 'زحلة': 'Zahle',
+    'البترون': 'Batroun', 'المزرعة': 'Mazraa', 'حدت': 'Hadath',
+    'خلدة': 'Khaldeh', 'الصوديكو': 'Sodeco', 'اليرزة': 'Yarze',
+    'عيناب': 'Ainab', 'المنصورية': 'Mansourieh',
+}
+
+def loc_suggestions(q):
+    """اقتراحات المنطقة: مطابقة إنجليزية مباشرة أو عبر الأسماء العربية"""
+    ql = q.strip().lower()
+    out, seen = [], set()
+
+    def add(en, ar=None):
+        if en.lower() == 'other' or en.lower() in seen:
+            return
+        seen.add(en.lower())
+        out.append((en, ar))
+
+    for l in known_locations():
+        if l.lower().startswith(ql):
+            add(l)
+    for l in known_locations():
+        if ql in l.lower() and not l.lower().startswith(ql):
+            add(l)
+    for ar, en in LOC_ALIASES.items():
+        ar_n = ar.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
+        ar_n = ar_n[2:] if ar_n.startswith('ال') else ar_n
+        q_n = ql.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
+        q_n = q_n[2:] if q_n.startswith('ال') else q_n
+        q_root = q_n.lstrip('ا')
+        if q_n and (q_n in ar_n or ar_n.startswith(q_n) or
+                    (q_root and (q_root in ar_n or ar_n.startswith(q_root)))):
+            add(en, ar)
+    return out[:8]
+
 st.set_page_config(page_title="عقار لبنان — منصة العقارات", layout="wide", page_icon="🏠")
 
 st.markdown("""
@@ -450,13 +497,25 @@ def post_panel():
                                       "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"])
         st.markdown('<div class="field-hint">💡 القضاء يظهر في <b>مخططات الأسعار</b> بالموقع — اختاره بدقة.</div>',
                     unsafe_allow_html=True)
-        loc_opts = ["✍️ أخرى (اكتب بنفسك)"] + known_locations()
-        loc_pick = st.selectbox("المنطقة / الحي — اكتب أول حرفين وسنقترح عليك",
-                                loc_opts, key="loc_pick")
-        st.markdown('<div class="field-hint">💡 <b>ابدأ بالكتابة مباشرة</b> — كل ما تكتب أحرفاً أكثر تضيق القائمة'
-                    ' (حمانا، فردان، الجميزة…) أو اختر "أخرى" واكتب منطقتك.</div>',
-                    unsafe_allow_html=True)
-        loc = st.text_input("اكتب اسم المنطقة / الحي") if loc_pick.startswith("✍️") else loc_pick
+        loc = st.text_input("المنطقة / الحي — اكتب أول حرفين وسنقترح عليك", key="loc_input")
+        st.markdown('<div class="field-hint">💡 <b>ابدأ بالكتابة مباشرة</b> — الاقتراحات تظهر تحت الخانة فوراً'
+                    ' بالإنجليزية أو العربية (Achrafieh أو الأشرفية، Hammana أو حمانا…)'
+                    ' أو أكمل كتابة منطقتك بنفسك.</div>', unsafe_allow_html=True)
+        q = loc.strip()
+        if len(q) >= 2:
+            suggestions = loc_suggestions(q)
+            if suggestions:
+                st.markdown("**اقتراحات:**")
+                for i in range(0, len(suggestions), 2):
+                    cols = st.columns(2)
+                    for j in range(2):
+                        if i + j < len(suggestions):
+                            en, ar = suggestions[i + j]
+                            label = f"{en} {ar}" if ar else en
+                            if cols[j].button(label, key=f"sug-{i}-{j}",
+                                              use_container_width=True):
+                                st.session_state.loc_input = en
+                                st.rerun()
         area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10)
         st.markdown('<div class="field-hint">💡 المساحة الكلية بالمتر² — أساس حساب <b>سعر المتر</b> الذي يقارنه الجميع.</div>',
                     unsafe_allow_html=True)
