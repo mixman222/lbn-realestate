@@ -46,7 +46,8 @@ def _init_local():
             floor TEXT, rooms INTEGER, area REAL,
             price_lbp REAL, furnished TEXT, parking TEXT,
             description TEXT, name TEXT, phone TEXT,
-            image_b64 TEXT, created_at TEXT, status TEXT DEFAULT 'new'
+            image_b64 TEXT, created_at TEXT, status TEXT DEFAULT 'new',
+            deal_type TEXT DEFAULT 'للبيع'
         )
     """)
     conn.commit()
@@ -58,13 +59,13 @@ def _add_local(data, image_b64):
     cur = conn.execute("""
         INSERT INTO user_ads
         (prop_type, governorate, location, floor, rooms, area, price_lbp,
-         furnished, parking, description, name, phone, image_b64, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         furnished, parking, description, name, phone, image_b64, created_at, deal_type)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (data.get('prop_type'), data.get('governorate'), data.get('location'),
           data.get('floor'), data.get('rooms'), data.get('area'), data.get('price_lbp'),
           data.get('furnished'), data.get('parking'), data.get('description'),
           data.get('name'), data.get('phone'), image_b64,
-          datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+          datetime.now().strftime('%Y-%m-%d %H:%M:%S'), data.get('deal_type', 'للبيع')))
     conn.commit()
     aid = cur.lastrowid
     conn.close()
@@ -104,7 +105,7 @@ def _load_cloud():
         df = pd.DataFrame(columns=['id', 'prop_type', 'governorate', 'location', 'floor',
                                    'rooms', 'area', 'price_lbp', 'furnished', 'parking',
                                    'description', 'name', 'phone', 'image_b64',
-                                   'created_at', 'status'])
+                                   'created_at', 'status', 'deal_type'])
     return df
 
 # ---------- الواجهة العامة ----------
