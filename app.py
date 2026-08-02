@@ -88,21 +88,13 @@ def load_data():
 
 df = load_data()
 
-def fmt_lbp(v):
-    """تنسيق الليرة اللبنانية: مليار/مليون/ألف"""
-    if pd.isna(v) or v == 0:
-        return "—"
-    if v >= 1e9:
-        return f"{v/1e9:.2f} مليار ل.ل"
-    if v >= 1e6:
-        return f"{v/1e6:.1f} مليون ل.ل"
-    if v >= 1e3:
-        return f"{v/1e3:.0f} ألف ل.ل"
-    return f"{v:,.0f} ل.ل"
-
 def fmt_usd(v):
     if pd.isna(v) or v == 0:
         return "—"
+    if v >= 1e6:
+        return f"${v/1e6:.1f}M"
+    if v >= 1e3:
+        return f"${v/1e3:.0f}K"
     return f"${v:,.0f}"
 
 # ---------- الهيدر ----------
@@ -139,13 +131,13 @@ def market_panel(dd, is_rent):
     """لوحة السوق: بطاقات + اتجاهات + فلترة + إعلانات"""
     suffix = " شهرياً" if is_rent else ""
     c1, c2, c3, c4 = st.columns(4)
-    med_m2 = dd['lbp_per_m2'].median() if not dd.empty else None
-    med_px = dd['price_lbp'].median() if not dd.empty else None
+    med_m2 = dd['price_per_m2'].median() if not dd.empty else None
+    med_px = dd['price_usd'].median() if not dd.empty else None
     med_ar = dd['area'].median() if not dd.empty else None
     cards = [
         ("إعلانات متاحة", f"{len(dd):,}"),
-        ("متوسط سعر المتر²", fmt_lbp(med_m2) + (f"/م²{suffix}" if med_m2 else "")),
-        ("متوسط سعر العقار", fmt_lbp(med_px) + (suffix if med_px else "")),
+        ("متوسط سعر المتر²", fmt_usd(med_m2) + (f"/م²{suffix}" if med_m2 else "")),
+        ("متوسط سعر العقار", fmt_usd(med_px) + (suffix if med_px else "")),
         ("متوسط المساحة", (f"{med_ar:,.0f} م²" if pd.notna(med_ar) else "—")),
     ]
     for col, (lbl, val) in zip([c1, c2, c3, c4], cards):
@@ -160,15 +152,15 @@ def market_panel(dd, is_rent):
     # ---------- اتجاهات ----------
     st.markdown('<div class="section-title">📈 متوسط سعر المتر² حسب القضاء</div>', unsafe_allow_html=True)
     g = (dd.groupby('governorate')
-           .agg(متوسط=('lbp_per_m2', 'median'), عدد=('id', 'count'))
+           .agg(متوسط=('price_per_m2', 'median'), عدد=('id', 'count'))
            .reset_index().sort_values('متوسط'))
     fig = go.Figure(go.Bar(
         x=g['متوسط'], y=g['governorate'], orientation='h',
-        text=[fmt_lbp(v) for v in g['متوسط']], textposition='outside',
+        text=[fmt_usd(v) for v in g['متوسط']], textposition='outside',
         marker=dict(color=g['متوسط'], colorscale='Tealgrn'),
     ))
     fig.update_layout(height=460, margin=dict(l=10, r=70, t=10, b=10),
-                      xaxis_title="ليرة/م²" + suffix, yaxis_title="", showlegend=False,
+                      xaxis_title="$/م²" + suffix, yaxis_title="", showlegend=False,
                       font=dict(size=13))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -184,8 +176,8 @@ def market_panel(dd, is_rent):
     with f3:
         sel_rooms = st.selectbox("الغرف", ["الكل", "1+", "2+", "3+"], key=f"rooms_{is_rent}")
     with f4:
-        max_price = st.number_input("الحد الأقصى (ل.ل)", min_value=0, value=0,
-                                    step=100_000_000, key=f"maxp_{is_rent}")
+        max_price = st.number_input("الحد الأقصى ($)", min_value=0, value=0, step=100_000,
+                                    key=f"maxp_{is_rent}")
     with f5:
         sort_by = st.selectbox("ترتيب", ["الأحدث", "السعر من الأقل", "السعر من الأعلى",
                                          "أقل سعر للمتر"], key=f"sort_{is_rent}")
@@ -199,15 +191,15 @@ def market_panel(dd, is_rent):
         need = int(sel_rooms[0])
         f = f[f['rooms'].notna() & (f['rooms'] >= need)]
     if max_price > 0:
-        f = f[f['price_lbp'] <= max_price]
+        f = f[f['price_usd'] <= max_price]
     if sort_by == "الأحدث":
         f = f.sort_values('date_posted', ascending=False, na_position='last')
     elif sort_by == "السعر من الأقل":
-        f = f.sort_values('price_lbp')
+        f = f.sort_values('price_usd')
     elif sort_by == "السعر من الأعلى":
-        f = f.sort_values('price_lbp', ascending=False)
+        f = f.sort_values('price_usd', ascending=False)
     else:
-        f = f.sort_values('lbp_per_m2')
+        f = f.sort_values('price_per_m2')
 
     st.caption(f"عرض {min(len(f), 30)} من {len(f):,} إعلان"
                f"{' للإيجار شهرياً' if is_rent else ' للبيع'}")
@@ -248,10 +240,10 @@ def market_panel(dd, is_rent):
                 st.markdown(f'<a class="cta-btn" href="https://lb.opensooq.com{r["url"]}" target="_blank">عرض الإعلان كاملاً</a>',
                             unsafe_allow_html=True)
             with col_price:
-                st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}{"/شهر" if is_rent else ""}</div>',
+                st.markdown(f'<div class="price-big">{fmt_usd(r["price_usd"])}{"/شهر" if is_rent else ""}</div>',
                             unsafe_allow_html=True)
                 if pd.notna(r['area']) and r['area'] > 0:
-                    st.markdown(f'<div class="muted">{fmt_lbp(r["lbp_per_m2"])}/م²{"/شهر" if is_rent else ""}</div>',
+                    st.markdown(f'<div class="muted">{fmt_usd(r["price_per_m2"])}/م²{"/شهر" if is_rent else ""}</div>',
                                 unsafe_allow_html=True)
 
 
@@ -265,9 +257,9 @@ def invest_panel():
     st.markdown('<div class="section-title">📊 تحليل المستثمر</div>', unsafe_allow_html=True)
     if not rent.empty:
         sm = (sale.groupby(['governorate', 'prop_type'])
-                .agg(sale_m2=('lbp_per_m2', 'median')).reset_index())
+                .agg(sale_m2=('price_per_m2', 'median')).reset_index())
         rm = (rent.groupby(['governorate', 'prop_type'])
-                .agg(rent_m2=('lbp_per_m2', 'median')).reset_index())
+                .agg(rent_m2=('price_per_m2', 'median')).reset_index())
         y = sm.merge(rm, on=['governorate', 'prop_type'])
         if not y.empty:
             # عائد سنوي تقديري: إيجار شهري للمتر² × 12 ÷ سعر بيع المتر²
@@ -287,14 +279,14 @@ def invest_panel():
                     st.markdown(f"""
                     <div class="yield-card">
                       <div class="ylbl">متوسط إيجار المتر²</div>
-                      <div class="yval">{fmt_lbp(rent['lbp_per_m2'].median())}</div>
+                      <div class="yval">{fmt_usd(rent['price_per_m2'].median())}</div>
                       <div class="ylbl">شهرياً</div>
                     </div>""", unsafe_allow_html=True)
                 with c3:
                     st.markdown(f"""
                     <div class="yield-card">
                       <div class="ylbl">متوسط سعر بيع المتر²</div>
-                      <div class="yval">{fmt_lbp(sale['lbp_per_m2'].median())}</div>
+                      <div class="yval">{fmt_usd(sale['price_per_m2'].median())}</div>
                       <div class="ylbl">على كامل لبنان</div>
                     </div>""", unsafe_allow_html=True)
 
@@ -327,10 +319,10 @@ def invest_panel():
 
     # ---------- أفضل الصفقات ----------
     st.markdown('<div class="section-title">💎 أفضل الصفقات (أدنى سعر للمتر²)</div>', unsafe_allow_html=True)
-    cheap = sale.nsmallest(6, 'lbp_per_m2')
+    cheap = sale.nsmallest(6, 'price_per_m2')
     rows = "".join(
         f"<tr><td>{r['title'][:55]}</td><td>{r['governorate']}</td>"
-        f"<td>{fmt_lbp(r['lbp_per_m2'])}/م²</td><td>{fmt_usd(r['price_usd'])}</td></tr>"
+        f"<td>{fmt_usd(r['price_per_m2'])}/م²</td><td>{fmt_usd(r['price_usd'])}</td></tr>"
         for _, r in cheap.iterrows())
     st.markdown(f"""
     <div style="overflow-x:auto;">
@@ -347,9 +339,9 @@ def invest_panel():
 
     # ---------- أغلى الأقضية ----------
     st.markdown('<div class="section-title">🏙️ الأغلى ثمناً (متوسط سعر المتر²)</div>', unsafe_allow_html=True)
-    top5 = (sale.groupby('governorate').agg(متوسط=('lbp_per_m2', 'median'))
+    top5 = (sale.groupby('governorate').agg(متوسط=('price_per_m2', 'median'))
                 .reset_index().sort_values('متوسط', ascending=False).head(5))
-    t5 = "".join(f"<tr><td>{r['governorate']}</td><td>{fmt_lbp(r['متوسط'])}</td></tr>"
+    t5 = "".join(f"<tr><td>{r['governorate']}</td><td>{fmt_usd(r['متوسط'])}</td></tr>"
                  for _, r in top5.iterrows())
     st.markdown(f"""
     <div style="overflow-x:auto;">
@@ -398,7 +390,7 @@ def post_panel():
 
     elif st.session_state.ad_step == 2:
         st.subheader("2️⃣ السعر والتفاصيل")
-        price = st.number_input("السعر المطلوب (ليرة لبنانية)", min_value=0, value=0, step=100_000_000)
+        price = st.number_input("السعر المطلوب ($)", min_value=0, value=0, step=10_000)
         rooms = st.selectbox("عدد الغرف", [0, 1, 2, 3, 4, 5, 6])
         floor = st.text_input("الطابق", placeholder="مثال: 3، أرضي، آخر طابق")
         furnished = st.radio("التأثيث", ["غير مفروش", "مفروش", "نصف مفروش"], horizontal=True)
@@ -413,7 +405,7 @@ def post_panel():
                 if price <= 0:
                     st.warning("أدخل السعر.")
                 else:
-                    st.session_state.ad_data.update({'price_lbp': price, 'rooms': rooms,
+                    st.session_state.ad_data.update({'price_lbp': price * 15000, 'rooms': rooms,
                                                      'floor': floor.strip() or 'غير محدد',
                                                      'furnished': furnished, 'parking': parking})
                     st.session_state.ad_step = 3
@@ -502,7 +494,7 @@ def post_panel():
                         st.markdown(f"👤 {r['name']} &nbsp;·&nbsp; <span class='phone-chip'>📞 {r['phone']}</span>",
                                     unsafe_allow_html=True)
                     with cp:
-                        st.markdown(f'<div class="price-big">{fmt_lbp(r["price_lbp"])}{price_extra}</div>',
+                        st.markdown(f'<div class="price-big">{fmt_usd(r["price_lbp"] / 15000)}{price_extra}</div>',
                                     unsafe_allow_html=True)
     except Exception:
         st.info("خدمة الإعلانات غير متاحة حالياً — حاول لاحقاً.")
@@ -551,6 +543,6 @@ with st.expander("📧 التقرير الأسبوعي المجاني — متو
         else:
             st.error("يرجى إدخال بريد إلكتروني صحيح.")
 
-st.markdown('<div class="foot">⚠️ الأسعار بالليرة اللبنانية كما يعلنها البائعون على السوق المفتوح — للتوجيه فقط وليست تقييماً مهنياً. '
+st.markdown('<div class="foot">⚠️ الأسعار بالدولار الأمريكي (محوّلة بسعر 15000 ل.ل/$) كما يعلنها البائعون على السوق المفتوح — للتوجيه فقط وليست تقييماً مهنياً. '
             'الأرقام الهاتفية مقنّعة؛ الرقم الكامل من صفحة الإعلان الرسمية. '
             '<br>عقار لبنان — منصة مستقلة لمتابعة سوق العقارات اللبناني. 🇱🇧</div>', unsafe_allow_html=True)

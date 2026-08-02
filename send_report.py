@@ -4,6 +4,7 @@
 """
 import os, sys
 from datetime import datetime, timedelta
+import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding='utf-8')
@@ -11,14 +12,14 @@ sys.stdout.reconfigure(encoding='utf-8')
 import brevo
 from normalize import load_listings, normalize
 
-def fmt_lbp(v):
-    if v >= 1e9:
-        return f"{v/1e9:.2f} مليار ل.ل"
+def fmt_usd(v):
+    if pd.isna(v) or v == 0:
+        return "—"
     if v >= 1e6:
-        return f"{v/1e6:.1f} مليون ل.ل"
+        return f"${v/1e6:.1f}M"
     if v >= 1e3:
-        return f"{v/1e3:.0f} ألف ل.ل"
-    return f"{v:,.0f} ل.ل"
+        return f"${v/1e3:.0f}K"
+    return f"${v:,.0f}"
 
 def build_report():
     df = normalize(load_listings())
@@ -27,20 +28,20 @@ def build_report():
     week_ago = datetime.now() - timedelta(days=7)
     new_ads = df[df['first_seen'] >= week_ago.strftime('%Y-%m-%d')]
     gov = (df.groupby('governorate')
-             .agg(متوسط=('lbp_per_m2', 'median'), عدد=('id', 'count'))
+             .agg(متوسط=('price_per_m2', 'median'), عدد=('id', 'count'))
              .sort_values('متوسط', ascending=False))
     top = gov.head(5)
-    cheap = df.nsmallest(5, 'lbp_per_m2')
+    cheap = df.nsmallest(5, 'price_per_m2')
     latest = df.sort_values('first_seen', ascending=False).head(5)
 
     rows_gov = "".join(
-        f"<tr><td>{idx}</td><td>{fmt_lbp(v['متوسط'])}</td><td>{v['عدد']}</td></tr>"
+        f"<tr><td>{idx}</td><td>{fmt_usd(v['متوسط'])}</td><td>{v['عدد']}</td></tr>"
         for idx, v in top.iterrows())
     rows_new = "".join(
-        f"<tr><td>{r['title'][:60]}</td><td>{r['city_ar']}</td><td>{fmt_lbp(r['price_lbp'])}</td></tr>"
+        f"<tr><td>{r['title'][:60]}</td><td>{r['city_ar']}</td><td>{fmt_usd(r['price_usd'])}</td></tr>"
         for _, r in latest.iterrows() if not r['title'] == "")
     rows_cheap = "".join(
-        f"<tr><td>{r['title'][:60]}</td><td>{r['city_ar']}</td><td>{fmt_lbp(r['lbp_per_m2'])}</td></tr>"
+        f"<tr><td>{r['title'][:60]}</td><td>{r['city_ar']}</td><td>{fmt_usd(r['price_per_m2'])}/م²</td></tr>"
         for _, r in cheap.iterrows())
 
     html = f"""
