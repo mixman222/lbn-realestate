@@ -99,13 +99,15 @@ st.markdown("""
 
     /* ---------- الهيدر ---------- */
     .topbar { display: flex; align-items: center; justify-content: space-between;
-              border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 14px; }
+              border-bottom: 1px solid #e5e7eb; padding-bottom: 14px; margin-bottom: 18px;
+              gap: 16px; flex-wrap: wrap; }
     .brand { font-size: 1.5rem; font-weight: 800; color: #0f2027; }
     .brand span { color: #2a9d8f; }
-    .topbar .tagline { color: #6b7280; font-size: 0.9rem; margin-top: 2px; }
-    .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .topbar .tagline { color: #6b7280; font-size: 0.9rem; margin-top: 4px; }
+    .chips { display: flex; gap: 14px; flex-wrap: wrap; }
     .chip { background: #f0fdf9; border: 1px solid #bfe8df; color: #147d64;
-            border-radius: 999px; padding: 5px 14px; font-size: 0.82rem; font-weight: 600; }
+            border-radius: 999px; padding: 9px 18px; font-size: 0.95rem; font-weight: 700;
+            box-shadow: 0 2px 6px rgba(20,125,100,.08); white-space: nowrap; }
 
     /* ---------- أزرار الأدوار ---------- */
     div[role="radiogroup"] { gap: 10px; }
