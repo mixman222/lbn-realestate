@@ -321,6 +321,8 @@ def market_panel(dd, is_rent):
                                          "أقل سعر للمتر"], key=f"sort_{is_rent}")
 
     f = dd.copy()
+    # OLX يحجب صفحات إعلاناته (404 حتى للحيّة) — إعلان OLX بلا رقم تواصل طريق مسدود؛ يُستبعد من القائمة فقط
+    f = f[(f['source'].ne('olx')) | (f['phone'].notna() & f['phone'].astype(str).str.strip().ne(''))]
     if sel_gov != "الكل":
         f = f[f['governorate'] == sel_gov]
     if sel_type != "الكل":
@@ -356,8 +358,12 @@ def market_panel(dd, is_rent):
         src = str(r['source']).strip() if pd.notna(r.get('source')) and str(r.get('source')).strip() else 'opensooq'
         src_label = "OLX لبنان" if src == 'olx' else "السوق المفتوح"
         url = str(r['url']) if pd.notna(r['url']) else ""
-        if not url.startswith("http"):
-            url = "https://lb.opensooq.com" + url
+        # OLX لبنان يحجب صفحات الإعلانات (404 حتى للإعلانات الحية) — نعرض رقم الهاتف مباشرة بدل رابط ميت
+        link_url, has_link = "", False
+        if url.startswith("http") and src != 'olx':
+            link_url, has_link = url, True
+        elif url.startswith("/"):
+            link_url, has_link = "https://lb.opensooq.com" + url, True
 
         with st.container(border=True):
             col_img, col_txt, col_price = st.columns([1, 2.4, 1])
@@ -382,8 +388,13 @@ def market_panel(dd, is_rent):
                 if pd.notna(r['date_posted']):
                     info.append(f"🗓 {r['date_posted'].strftime('%d/%m/%Y')}")
                 st.markdown(" &nbsp; ".join(info), unsafe_allow_html=True)
-                st.markdown(f'<a class="cta-btn" href="{url}" target="_blank">عرض الإعلان كاملاً</a>',
-                            unsafe_allow_html=True)
+                if has_link:
+                    st.markdown(f'<a class="cta-btn" href="{link_url}" target="_blank">عرض الإعلان كاملاً</a>',
+                                unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="muted" style="font-size:0.8rem">'
+                                '📞 إعلانات OLX تُعرض بالرقم المباشر — تواصل مع المعلن أعلاه.</div>',
+                                unsafe_allow_html=True)
             with col_price:
                 st.markdown(f'<div class="price-big">{fmt_usd(r["price_usd"])}{"/شهر" if is_rent else ""}</div>',
                             unsafe_allow_html=True)
