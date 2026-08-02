@@ -12,6 +12,12 @@ import plotly.graph_objects as go
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from normalize import load_listings, normalize
 
+try:
+    from streamlit_searchbox import st_searchbox
+    HAS_SEARCHBOX = True
+except Exception:
+    HAS_SEARCHBOX = False
+
 @st.cache_data(ttl=3600)
 def known_locations():
     """أسماء الأحياء/المناطق الفريدة من قاعدة البيانات لدعم البحث الفوري في خانة المنطقة"""
@@ -470,16 +476,13 @@ def invest_panel():
     </div>""", unsafe_allow_html=True)
 
 
-def _loc_typed():
-    """عند تحرير خانة المنطقة يدوياً نلغي أي اختيار سابق من القائمة"""
-    st.session_state.pop('picked_loc', None)
-
-
-def _pick_location(labels_map):
-    """حفظ المنطقة المختارة من القائمة المنسدلة (لا يكتب مباشرة في خانة النص)"""
-    picked = st.session_state.sug_box
-    if picked and picked in labels_map:
-        st.session_state.picked_loc = labels_map[picked]
+def _search_locations(searchterm):
+    """مصدر اقتراحات منطقة البحث: أسماء حقيقية من قاعدة البيانات (عربي/إنجليزي)"""
+    term = (searchterm or '').strip()
+    if len(term) < 2:
+        return []
+    return [(f"{ar} ({en})".strip() if ar else en, en)
+            for en, ar in loc_suggestions(term)]
 
 def post_panel():
     """لوحة البائع/المالك: اختيار نوع العرض + النشر بثلاث خطوات + إعلانات المستخدمين"""
@@ -508,29 +511,31 @@ def post_panel():
                                       "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"])
         st.markdown('<div class="field-hint">💡 القضاء يظهر في <b>مخططات الأسعار</b> بالموقع — اختاره بدقة.</div>',
                     unsafe_allow_html=True)
-        loc = st.text_input("المنطقة / الحي — اكتب أول حرفين وسنقترح عليك", key="loc_input",
-                            on_change=_loc_typed)
-        st.markdown('<div class="field-hint">💡 <b>ابدأ بالكتابة مباشرة</b> — الاقتراحات تظهر تحت الخانة فوراً'
-                    ' بالإنجليزية أو العربية (Achrafieh أو الأشرفية، Hammana أو حمانا…)'
-                    ' أو أكمل كتابة منطقتك بنفسك.</div>', unsafe_allow_html=True)
-        q = loc.strip()
-        if len(q) >= 2:
-            sug = loc_suggestions(q)
-            if sug:
-                labels_map = {f"{ar} ({en})".strip() if ar else en: en
-                              for en, ar in sug}
-                placeholder = "— اختر منطقة —"
-                st.selectbox("⬇️ اقتراحات المناطق — اختر من القائمة أو أكمل الكتابة",
-                             [placeholder] + list(labels_map), key="sug_box",
-                             on_change=_pick_location, args=(labels_map,))
+        if HAS_SEARCHBOX:
+            loc = st_searchbox(
+                _search_locations,
+                label="المنطقة / الحي — اكتب أول حرفين وسنقترح عليك",
+                placeholder="Achrafieh، الأشرفية، حمانا…",
+                default="", default_use_searchterm=True,
+                edit_after_submit="option", rerun_on_update=True,
+                key="loc_searchbox",
+                style_overrides={'searchbox': {
+                    'control': {'minHeight': '54px', 'borderRadius': '12px',
+                                'border': '2px solid #cbd5e1', 'backgroundColor': '#fff',
+                                'boxShadow': 'none', 'fontSize': '1.05rem'},
+                    'input': {'fontSize': '1.08rem', 'color': '#1f2937'},
+                    'placeholder': {'fontSize': '1.02rem', 'color': '#9aa7ad'},
+                    'menuList': {'fontSize': '1rem', 'color': '#1f2937'},
+                }})
+            loc_final = (loc or '').strip()
+        else:
+            loc_final = st.text_input("المنطقة / الحي", key="loc_input").strip()
+        st.markdown('<div class="field-hint">💡 <b>اكتب أول حرفين</b> — التكملة تظهر تلقائياً داخل الخانة'
+                    ' نفسها (Achrafieh، الأشرفية، Hammana، حمانا…)، اخترها من القائمة'
+                    ' أو أكمل الكتابة بنفسك.</div>', unsafe_allow_html=True)
         area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10)
         st.markdown('<div class="field-hint">💡 المساحة الكلية بالمتر² — أساس حساب <b>سعر المتر</b>'
                     ' الذي يقارنه الجميع.</div>', unsafe_allow_html=True)
-        picked_loc = st.session_state.get('picked_loc')
-        if picked_loc:
-            st.markdown(f'<div class="field-hint">📍 سيُنشر في: <b>{picked_loc}</b> ✔'
-                        ' — عدّل الخانة أعلاه إن أردت غيره.</div>', unsafe_allow_html=True)
-        loc_final = picked_loc or loc.strip()
         if st.button("التالي ←"):
             if not loc_final or area <= 0:
                 st.warning("اختر المنطقة وأدخل المساحة.")
