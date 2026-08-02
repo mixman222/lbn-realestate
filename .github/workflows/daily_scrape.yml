@@ -3,8 +3,12 @@ name: Daily Scrape
 on:
   schedule:
     - cron: "0 8 * * *"
-    - cron: "8 9 * * 5"
   workflow_dispatch:
+    inputs:
+      force_report:
+        description: "إرسال التقرير الأسبوعي الآن (بدل انتظار الجمعة)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -54,5 +58,6 @@ jobs:
           BREVO_SMTP_USER: ${{ secrets.BREVO_SMTP_USER }}
           BREVO_SENDER: ${{ secrets.BREVO_SENDER }}
           BREVO_LIST_ID: "3"
+          FORCE_REPORT: ${{ inputs.force_report == true && '1' || '0' }}
         run: python send_report.py
 

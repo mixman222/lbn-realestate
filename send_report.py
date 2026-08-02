@@ -74,6 +74,10 @@ def build_report():
     return subject, html
 
 if __name__ == "__main__":
+    # التقرير أسبوعي: يُرسل الجمعة فقط، إلا في التشغيل اليدوي (force)
+    if datetime.now().weekday() != 4 and os.environ.get("FORCE_REPORT") != "1":
+        print("ليس الجمعة — لم يرسل شيء")
+        sys.exit(0)
     subject, html = build_report()
     if not subject:
         print("لا توجد بيانات — لم يرسل شيء")
