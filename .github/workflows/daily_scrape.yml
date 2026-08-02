@@ -27,7 +27,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run scraper
-        run: python scraper_opensooq.py
+        run: python scrape_all.py
 
       - name: Commit updated data
         run: |

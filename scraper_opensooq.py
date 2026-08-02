@@ -220,6 +220,7 @@ def extract_fields(it, listing_type="sale"):
                   if it.get('image_uri') else None),
         'image_count': it.get('image_count'),
         'listing_type': listing_type,
+        'source': 'opensooq',
     }
 
 def init_db():
@@ -245,11 +246,12 @@ def init_db():
             description TEXT,
             highlights TEXT,
             image TEXT,
-            listing_type TEXT DEFAULT 'sale'
+            listing_type TEXT DEFAULT 'sale',
+            source TEXT DEFAULT 'opensooq'
         )
     """)
     try:
-        conn.execute("ALTER TABLE listings ADD COLUMN listing_type TEXT DEFAULT 'sale'")
+        conn.execute("ALTER TABLE listings ADD COLUMN source TEXT DEFAULT 'opensooq'")
         conn.commit()
     except Exception:
         pass
@@ -283,12 +285,12 @@ def scrape_listing_page(url, conn, listing_type="sale"):
                     INSERT OR IGNORE INTO listings
                     (url, title, price_lbp, price_usd, area, rooms, location, city, prop_type,
                      date_posted, first_seen, last_seen, seller, seller_url, phone, description,
-                     highlights, image, listing_type)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                     highlights, image, listing_type, source)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (f['url'], f['title'], f['price_lbp'], f['price_usd'], f['area'], f['rooms'],
                       f['location'], f['city'], f['prop_type'], f['date_posted'], now, now,
                       f['seller'], f['seller_url'], f['phone'], f['description'], f['highlights'],
-                      f['image'], listing_type))
+                      f['image'], listing_type, f.get('source', 'opensooq')))
                 conn.execute("UPDATE listings SET last_seen=?, price_lbp=?, price_usd=?, area=?, rooms=?, title=?, seller=?, phone=?, description=?, image=? WHERE url=?",
                              (now, f['price_lbp'], f['price_usd'], f['area'], f['rooms'], f['title'], f['seller'], f['phone'], f['description'], f['image'], f['url']))
                 added += 1

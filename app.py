@@ -215,6 +215,11 @@ def market_panel(dd, is_rent):
         seller = r['seller'] if pd.notna(r['seller']) and str(r['seller']).strip() else ""
         phone = r['phone'] if pd.notna(r['phone']) else ""
         img = r['image'] if pd.notna(r['image']) else None
+        src = str(r['source']).strip() if pd.notna(r.get('source')) and str(r.get('source')).strip() else 'opensooq'
+        src_label = "OLX لبنان" if src == 'olx' else "السوق المفتوح"
+        url = str(r['url']) if pd.notna(r['url']) else ""
+        if not url.startswith("http"):
+            url = "https://lb.opensooq.com" + url
 
         with st.container(border=True):
             col_img, col_txt, col_price = st.columns([1, 2.4, 1])
@@ -226,7 +231,9 @@ def market_panel(dd, is_rent):
                         pass
             with col_txt:
                 st.markdown(f"**{r['title']}**")
-                st.markdown(f"📍 {loc} &nbsp;·&nbsp; {tags_html}", unsafe_allow_html=True)
+                st.markdown(f"📍 {loc} &nbsp;·&nbsp; {tags_html}"
+                            f"<span class='tag' style='background:#eef2ff;color:#4338ca;'>{src_label}</span>",
+                            unsafe_allow_html=True)
                 if desc:
                     st.markdown(f'<div class="muted">{desc}</div>', unsafe_allow_html=True)
                 info = []
@@ -237,7 +244,7 @@ def market_panel(dd, is_rent):
                 if pd.notna(r['date_posted']):
                     info.append(f"🗓 {r['date_posted'].strftime('%d/%m/%Y')}")
                 st.markdown(" &nbsp; ".join(info), unsafe_allow_html=True)
-                st.markdown(f'<a class="cta-btn" href="https://lb.opensooq.com{r["url"]}" target="_blank">عرض الإعلان كاملاً</a>',
+                st.markdown(f'<a class="cta-btn" href="{url}" target="_blank">عرض الإعلان كاملاً</a>',
                             unsafe_allow_html=True)
             with col_price:
                 st.markdown(f'<div class="price-big">{fmt_usd(r["price_usd"])}{"/شهر" if is_rent else ""}</div>',
