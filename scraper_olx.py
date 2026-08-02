@@ -141,8 +141,16 @@ def extract_fields(hit, purpose):
         if p.get('url'):
             img = p['url']
             break
-    if img is None and hit.get('coverPhoto', {}).get('url'):
-        img = hit['coverPhoto']['url']
+        if p.get('id'):
+            # OLX لم يعد يرسل url داخل الصور — الرابط يُبنى من معرّف الصورة
+            img = f"https://images-prod.olx-dubizzle.com/thumbnails/{p['id']}-400x300.webp"
+            break
+    if img is None:
+        cover = hit.get('coverPhoto') or {}
+        if cover.get('url'):
+            img = cover['url']
+        elif cover.get('id'):
+            img = f"https://images-prod.olx-dubizzle.com/thumbnails/{cover['id']}-400x300.webp"
 
     return {
         'ad_id': hit.get('externalID'),
