@@ -12,6 +12,28 @@ import plotly.graph_objects as go
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from normalize import load_listings, normalize
 
+@st.cache_data(ttl=3600)
+def known_locations():
+    """أسماء الأحياء/المناطق الفريدة من قاعدة البيانات لدعم البحث الفوري في خانة المنطقة"""
+    db = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'realestate.db')
+    locs, seen = [], set()
+    try:
+        con = sqlite3.connect(db)
+        rows = con.execute(
+            "SELECT DISTINCT location FROM listings "
+            "WHERE location IS NOT NULL AND location != ''").fetchall()
+        con.close()
+        for (loc,) in rows:
+            loc = (loc or '').strip()
+            if (not loc or len(loc) < 2 or any(c in loc for c in '-؟،')):
+                continue
+            if loc not in seen:
+                seen.add(loc)
+                locs.append(loc)
+    except Exception:
+        pass
+    return sorted(locs) if locs else ["بيروت", "حمانا", "فردان", "الجميزة", "انطلياس"]
+
 st.set_page_config(page_title="عقار لبنان — منصة العقارات", layout="wide", page_icon="🏠")
 
 st.markdown("""
@@ -428,9 +450,13 @@ def post_panel():
                                       "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"])
         st.markdown('<div class="field-hint">💡 القضاء يظهر في <b>مخططات الأسعار</b> بالموقع — اختاره بدقة.</div>',
                     unsafe_allow_html=True)
-        loc = st.text_input("المنطقة / الحي (مثال: حمانا، فردان...)")
-        st.markdown('<div class="field-hint">💡 المنطقة الأدق توصل أسرع: <b>حمانا، فردان، الجميزة، أنطلياس…</b></div>',
+        loc_opts = ["✍️ أخرى (اكتب بنفسك)"] + known_locations()
+        loc_pick = st.selectbox("المنطقة / الحي — اكتب أول حرفين وسنقترح عليك",
+                                loc_opts, key="loc_pick")
+        st.markdown('<div class="field-hint">💡 <b>ابدأ بالكتابة مباشرة</b> — كل ما تكتب أحرفاً أكثر تضيق القائمة'
+                    ' (حمانا، فردان، الجميزة…) أو اختر "أخرى" واكتب منطقتك.</div>',
                     unsafe_allow_html=True)
+        loc = st.text_input("اكتب اسم المنطقة / الحي") if loc_pick.startswith("✍️") else loc_pick
         area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10)
         st.markdown('<div class="field-hint">💡 المساحة الكلية بالمتر² — أساس حساب <b>سعر المتر</b> الذي يقارنه الجميع.</div>',
                     unsafe_allow_html=True)
