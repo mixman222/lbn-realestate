@@ -78,6 +78,40 @@ st.markdown("""
     div[data-testid="stImage"] img { border-radius: 10px; }
     .hero-note { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px;
                  padding: 10px 16px; color: #6b7280; font-size: 0.85rem; }
+
+    /* ---------- خانات كبيرة وواضحة ---------- */
+    div[data-testid="stWidgetLabel"] p { font-size: 1.02rem !important; font-weight: 700 !important; color: #1f2937 !important; }
+    div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input {
+        font-size: 1.08rem !important; padding: 14px 16px !important; border-radius: 12px !important;
+        border: 2px solid #cbd5e1 !important; background: #fff !important; min-height: 54px !important; }
+    div[data-testid="stTextInput"] input:focus, div[data-testid="stNumberInput"] input:focus {
+        border-color: #2a9d8f !important; box-shadow: 0 0 0 3px rgba(42,157,143,.15) !important; }
+    div[data-testid="stTextArea"] textarea {
+        font-size: 1.08rem !important; padding: 14px 16px !important; border-radius: 12px !important;
+        border: 2px solid #cbd5e1 !important; min-height: 110px !important; }
+    div[data-testid="stTextArea"] textarea:focus { border-color: #2a9d8f !important;
+        box-shadow: 0 0 0 3px rgba(42,157,143,.15) !important; }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        min-height: 54px !important; border-radius: 12px !important;
+        border: 2px solid #cbd5e1 !important; font-size: 1.05rem !important; }
+    div[data-testid="stSelectbox"]:focus-within div[data-baseweb="select"] > div {
+        border-color: #2a9d8f !important; box-shadow: 0 0 0 3px rgba(42,157,143,.15) !important; }
+    div[data-testid="stRadio"] label { font-size: 1.02rem !important; font-weight: 600 !important; }
+    div[data-testid="stFileUploader"] section { border-radius: 12px !important; }
+    div[data-testid="stFileUploader"] button { font-size: 1.02rem !important; }
+    div[data-testid="stButton"] button { font-size: 1.05rem !important; font-weight: 700 !important;
+        border-radius: 12px !important; padding: 10px 20px !important; }
+    .stFormSubmitButton button { font-size: 1.05rem !important; font-weight: 700 !important;
+        border-radius: 12px !important; padding: 10px 20px !important; }
+
+    /* ---------- دليل المساعدة تحت الخانة ---------- */
+    .field-hint { background: #f0f7ff; border-right: 4px solid #2a9d8f; color: #33576b;
+        border-radius: 8px; padding: 8px 12px; margin: 4px 0 14px 0; font-size: 0.92rem;
+        line-height: 1.6; }
+    .field-hint b { color: #147d64; }
+    .step-banner { background: linear-gradient(135deg, #1f6f8b 0%, #2a9d8f 100%); color: #fff;
+        border-radius: 12px; padding: 10px 16px; margin: 10px 0; font-size: 1rem; font-weight: 700; }
+    .step-banner span { opacity: .85; font-weight: 400; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -376,15 +410,25 @@ def post_panel():
         st.session_state.ad_data = {}
 
     st.progress(st.session_state.ad_step / 3)
-    st.caption(f"الخطوة {st.session_state.ad_step} من 3")
+    st.markdown(f'<div class="step-banner">الخطوة {st.session_state.ad_step} من 3'
+                f'<span> — {["أساسيات العقار", "السعر والتفاصيل", "الصور والتواصل"][st.session_state.ad_step - 1]}</span></div>',
+                unsafe_allow_html=True)
 
     if st.session_state.ad_step == 1:
         st.subheader("1️⃣ أساسيات العقار")
         pt = st.selectbox("نوع العقار", ["شقة", "منزل", "فيلا", "أرض", "تجاري", "مكتب", "محل", "مزرعة"])
+        st.markdown('<div class="field-hint">💡 <b>الشقة</b> الأكثر طلباً — حدّد النوع بدقة ليصل إعلانك للمهتمين المناسبين.</div>',
+                    unsafe_allow_html=True)
         gov = st.selectbox("القضاء", ["بيروت", "المتن", "بعبدا", "عاليه", "كسروان", "جبيل", "الشوف",
                                       "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"])
+        st.markdown('<div class="field-hint">💡 القضاء يظهر في <b>مخططات الأسعار</b> بالموقع — اختاره بدقة.</div>',
+                    unsafe_allow_html=True)
         loc = st.text_input("المنطقة / الحي (مثال: حمانا، فردان...)")
+        st.markdown('<div class="field-hint">💡 المنطقة الأدق توصل أسرع: <b>حمانا، فردان، الجميزة، أنطلياس…</b></div>',
+                    unsafe_allow_html=True)
         area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10)
+        st.markdown('<div class="field-hint">💡 المساحة الكلية بالمتر² — أساس حساب <b>سعر المتر</b> الذي يقارنه الجميع.</div>',
+                    unsafe_allow_html=True)
         if st.button("التالي ←"):
             if not loc.strip() or area <= 0:
                 st.warning("اكتب المنطقة وأدخل المساحة.")
@@ -398,8 +442,14 @@ def post_panel():
     elif st.session_state.ad_step == 2:
         st.subheader("2️⃣ السعر والتفاصيل")
         price = st.number_input("السعر المطلوب ($)", min_value=0, value=0, step=10_000)
+        st.markdown('<div class="field-hint">💡 <b>سعر واقعي</b> يجذب الاهتمام — المقارنة تبدأ من سعر المتر²:'
+                    ' شقق بيروت بين 2,000$ و 4,000$/م² تقريباً.</div>', unsafe_allow_html=True)
         rooms = st.selectbox("عدد الغرف", [0, 1, 2, 3, 4, 5, 6])
+        st.markdown('<div class="field-hint">💡 اختر <b>0</b> للأراضي والمكاتب — الغرف تحدد نوع المشتري.</div>',
+                    unsafe_allow_html=True)
         floor = st.text_input("الطابق", placeholder="مثال: 3، أرضي، آخر طابق")
+        st.markdown('<div class="field-hint">💡 مهم جداً: الأراضي اكتب <b>—</b>، والطوابق العليا أغلى بالإطلالات.</div>',
+                    unsafe_allow_html=True)
         furnished = st.radio("التأثيث", ["غير مفروش", "مفروش", "نصف مفروش"], horizontal=True)
         parking = st.radio("موقف سيارة", ["لا", "نعم"], horizontal=True)
         c1b, c2b = st.columns(2)
@@ -421,9 +471,17 @@ def post_panel():
     else:
         st.subheader("3️⃣ صورك ومعلومات التواصل")
         img = st.file_uploader("صورة العقار (اختياري)", type=["jpg", "jpeg", "png", "webp"])
+        st.markdown('<div class="field-hint">💡 الصورة <b>أول ما يُرى</b> — ارفع صورة واضحة ومضيئة، والإعلانات'
+                    ' المصورة تحصل على تواصل أكثر بمرتين.</div>', unsafe_allow_html=True)
         desc = st.text_area("وصف مختصر (اختياري)", placeholder="مثال: شقة مطلة، إطلالة بحرية، قرب الجامعة...")
+        st.markdown('<div class="field-hint">💡 التفاصيل تفرق: <b>الإطلالة، القرب من الجامعات، الخدمات، السن، المصعد…</b></div>',
+                    unsafe_allow_html=True)
         name = st.text_input("اسمك")
+        st.markdown('<div class="field-hint">💡 الاسم يبني <b>الثقة</b> — المهتمون يتواصلون بثقة أكبر مع صاحب إعلان معرّف.</div>',
+                    unsafe_allow_html=True)
         phone = st.text_input("رقم الهاتف (ليراه المهتمون)", placeholder="70 123 456")
+        st.markdown('<div class="field-hint">💡 تحقق من الرقم — الهاتف هو <b>أسرع طريق</b> لإغلاق الصفقة.</div>',
+                    unsafe_allow_html=True)
         c1b, c2b = st.columns(2)
         with c1b:
             if st.button("→ رجوع"):
