@@ -109,6 +109,8 @@ st.markdown("""
             box-shadow: 0 2px 6px rgba(20,125,100,.08); white-space: nowrap; }
 
     /* ---------- أزرار الأدوار ---------- */
+    div[data-testid="stElementContainer"]:has(> div[data-testid="stRadio"]) { width: 100% !important; }
+    div[data-testid="stRadio"] { width: 100% !important; }
     div[role="radiogroup"] { gap: 10px; flex-direction: row !important; }
     div[role="radiogroup"] label { background: #f9fafb; border: 1.5px solid #e5e7eb;
         border-radius: 14px; padding: 16px 20px; flex: 1 1 auto; min-width: max-content;
@@ -217,7 +219,7 @@ st.markdown("""
         div[data-testid="stHorizontalBlock"] div[data-testid="stColumn"] {
             flex: 1 0 100% !important; width: 100% !important; max-width: 100% !important; }
         div[role="radiogroup"] { flex-direction: column !important; }
-        div[role="radiogroup"] label { width: 100%; }
+        div[role="radiogroup"] label { width: 100%; align-self: stretch; }
     }
 </style>
 """, unsafe_allow_html=True)
