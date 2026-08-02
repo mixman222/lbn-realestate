@@ -109,7 +109,7 @@ st.markdown("""
             box-shadow: 0 2px 6px rgba(20,125,100,.08); white-space: nowrap; }
 
     /* ---------- أزرار الأدوار ---------- */
-    div[role="radiogroup"] { gap: 10px; }
+    div[role="radiogroup"] { gap: 10px; flex-direction: row !important; }
     div[role="radiogroup"] label { background: #f9fafb; border: 1.5px solid #e5e7eb;
         border-radius: 14px; padding: 16px 20px; flex: 1 1 auto; min-width: max-content;
         text-align: center; font-weight: 700; font-size: 1.08rem; color: #374151;
@@ -207,6 +207,18 @@ st.markdown("""
     .step-banner { background: linear-gradient(135deg, #1f6f8b 0%, #2a9d8f 100%); color: #fff;
         border-radius: 12px; padding: 10px 16px; margin: 10px 0; font-size: 1rem; font-weight: 700; }
     .step-banner span { opacity: .85; font-weight: 400; }
+
+    /* ---------- متجاوب: شاشات الموبايل ---------- */
+    @media (max-width: 768px) {
+        .block-container { padding: 0.6rem 0.9rem 2.5rem; }
+        .topbar { flex-direction: column; align-items: flex-start; }
+        .topbar .chips { width: 100%; }
+        div[data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+        div[data-testid="stHorizontalBlock"] div[data-testid="stColumn"] {
+            flex: 1 0 100% !important; width: 100% !important; max-width: 100% !important; }
+        div[role="radiogroup"] { flex-direction: column !important; }
+        div[role="radiogroup"] label { width: 100%; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
