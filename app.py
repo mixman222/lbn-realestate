@@ -283,7 +283,7 @@ def market_panel(dd, is_rent):
     """لوحة السوق: بطاقات + اتجاهات + فلترة + إعلانات"""
     suffix = " شهرياً" if is_rent else ""
     c1, c2, c3, c4 = st.columns(4)
-    med_m2 = dd['price_per_m2'].median() if not dd.empty else None
+    med_m2 = dd['monthly_m2'].median() if not dd.empty else None
     med_px = dd['price_usd'].median() if not dd.empty else None
     med_ar = dd['area'].median() if not dd.empty else None
     cards = [
@@ -304,7 +304,7 @@ def market_panel(dd, is_rent):
     # ---------- اتجاهات ----------
     st.markdown('<div class="section-title">📈 متوسط سعر المتر² حسب القضاء</div>', unsafe_allow_html=True)
     g = (dd.groupby('governorate')
-           .agg(متوسط=('price_per_m2', 'median'), عدد=('id', 'count'))
+           .agg(متوسط=('monthly_m2', 'median'), عدد=('id', 'count'))
            .reset_index().sort_values('متوسط'))
     fig = go.Figure(go.Bar(
         x=g['متوسط'], y=g['governorate'], orientation='h',
@@ -353,7 +353,7 @@ def market_panel(dd, is_rent):
     elif sort_by == "السعر من الأعلى":
         f = f.sort_values('price_usd', ascending=False)
     else:
-        f = f.sort_values('price_per_m2')
+        f = f.sort_values('monthly_m2', na_position='last')
 
     st.caption(f"عرض {min(len(f), 30)} من {len(f):,} إعلان"
                f"{' للإيجار شهرياً' if is_rent else ' للبيع'}")
@@ -410,10 +410,12 @@ def market_panel(dd, is_rent):
                                 '📞 إعلانات OLX تُعرض بالرقم المباشر — تواصل مع المعلن أعلاه.</div>',
                                 unsafe_allow_html=True)
             with col_price:
-                st.markdown(f'<div class="price-big">{fmt_usd(r["price_usd"])}{"/شهر" if is_rent else ""}</div>',
+                period = str(r['price_period']) if pd.notna(r.get('price_period')) else 'month'
+                period_ar = {'night': '/ليلة', 'week': '/أسبوع', 'year': '/سنة'}.get(period, '/شهر')
+                st.markdown(f'<div class="price-big">{fmt_usd(r["price_usd"])}{period_ar if is_rent else ""}</div>',
                             unsafe_allow_html=True)
-                if pd.notna(r['area']) and r['area'] > 0:
-                    st.markdown(f'<div class="muted">{fmt_usd(r["price_per_m2"])}/م²{"/شهر" if is_rent else ""}</div>',
+                if pd.notna(r['monthly_m2']) and r['area'] > 0:
+                    st.markdown(f'<div class="muted">{fmt_usd(r["monthly_m2"])}/م²/شهر</div>',
                                 unsafe_allow_html=True)
 
 
@@ -429,7 +431,7 @@ def invest_panel():
         sm = (sale.groupby(['governorate', 'prop_type'])
                 .agg(sale_m2=('price_per_m2', 'median')).reset_index())
         rm = (rent.groupby(['governorate', 'prop_type'])
-                .agg(rent_m2=('price_per_m2', 'median')).reset_index())
+                .agg(rent_m2=('monthly_m2', 'median')).reset_index())
         y = sm.merge(rm, on=['governorate', 'prop_type'])
         if not y.empty:
             # عائد سنوي تقديري: إيجار شهري للمتر² × 12 ÷ سعر بيع المتر²
@@ -449,7 +451,7 @@ def invest_panel():
                     st.markdown(f"""
                     <div class="yield-card">
                       <div class="ylbl">متوسط إيجار المتر²</div>
-                      <div class="yval">{fmt_usd(rent['price_per_m2'].median())}</div>
+                      <div class="yval">{fmt_usd(rent['monthly_m2'].median())}</div>
                       <div class="ylbl">شهرياً</div>
                     </div>""", unsafe_allow_html=True)
                 with c3:

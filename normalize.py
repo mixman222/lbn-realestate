@@ -51,10 +51,18 @@ def normalize(df, lbp_rate=15000.0):
     if df.empty:
         return df
     df = df.copy()
+    # فترة السعر (إيجار سياحي بالليلة، بعض الشاليهات سنوياً) — الإفتراضي شهري
+    if 'price_period' not in df.columns:
+        df['price_period'] = 'month'
+    df['price_period'] = df['price_period'].fillna('month').astype(str).str.strip().str.lower()
     # إعادة حساب USD بسعر قابل للتعديل
     df['price_usd'] = df['price_lbp'] / lbp_rate
     # سعر المتر²
     df['price_per_m2'] = df['price_usd'] / df['area']
+    # مؤشر شهري قابل للمقارنة: السنوي ÷ 12، بالليلة/بالأسبوع خارج الإحصاءات الشهرية
+    df['monthly_m2'] = df['price_per_m2']
+    df.loc[df['price_period'] == 'year', 'monthly_m2'] = df['price_per_m2'] / 12
+    df.loc[df['price_period'].isin(['night', 'week']), 'monthly_m2'] = None
     # سعر المتر² بالليرة مباشرة (بدون أي تحويل)
     df['lbp_per_m2'] = df['price_lbp'] / df['area']
     # توحيد أسماء المدن

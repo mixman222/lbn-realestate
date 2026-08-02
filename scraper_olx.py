@@ -89,6 +89,19 @@ def extract_fields(hit, purpose):
     if not price_usd:
         return None
 
+    # فترة السعر: إيجار سياحي بالليلة، وبعض الشاليهات سنوياً/أسبوعياً
+    period = 'month'
+    if extra.get('accommodation_type') is not None:
+        period = 'night'
+    else:
+        rp = str(extra.get('rental_period') or '')
+        if rp == '1':
+            period = 'night'
+        elif rp == '2':
+            period = 'week'
+        elif rp == '4':
+            period = 'year'
+
     area = None
     try:
         area = float(extra.get('ft') or 0) or None
@@ -174,6 +187,7 @@ def extract_fields(hit, purpose):
         'highlights': None,
         'image': img,
         'image_count': hit.get('photoCount'),
+        'price_period': period,
         'listing_type': 'rent' if purpose == 'rent' else 'sale',
         'source': 'olx',
     }
@@ -203,11 +217,17 @@ def init_db():
             highlights TEXT,
             image TEXT,
             listing_type TEXT DEFAULT 'sale',
-            source TEXT DEFAULT 'opensooq'
+            source TEXT DEFAULT 'opensooq',
+            price_period TEXT DEFAULT 'month'
         )
     """)
     try:
         conn.execute("ALTER TABLE listings ADD COLUMN source TEXT DEFAULT 'opensooq'")
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE listings ADD COLUMN price_period TEXT DEFAULT 'month'")
         conn.commit()
     except Exception:
         pass
@@ -234,14 +254,14 @@ def scrape_subcategory(subcat_id, slug, purpose, conn, max_pages=MAX_PAGES_PER_S
                     INSERT OR IGNORE INTO listings
                     (url, title, price_lbp, price_usd, area, rooms, location, city, prop_type,
                      date_posted, first_seen, last_seen, seller, seller_url, phone, description,
-                     highlights, image, listing_type, source)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                     highlights, image, listing_type, source, price_period)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (f['url'], f['title'], f['price_lbp'], f['price_usd'], f['area'], f['rooms'],
                       f['location'], f['city'], f['prop_type'], f['date_posted'], now, now,
                       f['seller'], f['seller_url'], f['phone'], f['description'], f['highlights'],
-                      f['image'], f['listing_type'], f['source']))
-                conn.execute("UPDATE listings SET last_seen=?, price_lbp=?, price_usd=?, area=?, rooms=?, title=?, seller=?, phone=?, description=?, image=? WHERE url=?",
-                             (now, f['price_lbp'], f['price_usd'], f['area'], f['rooms'], f['title'], f['seller'], f['phone'], f['description'], f['image'], f['url']))
+                      f['image'], f['listing_type'], f['source'], f['price_period']))
+                conn.execute("UPDATE listings SET last_seen=?, price_lbp=?, price_usd=?, area=?, rooms=?, title=?, seller=?, phone=?, description=?, image=?, price_period=? WHERE url=?",
+                             (now, f['price_lbp'], f['price_usd'], f['area'], f['rooms'], f['title'], f['seller'], f['phone'], f['description'], f['image'], f['price_period'], f['url']))
                 added += 1
             except Exception:
                 pass
