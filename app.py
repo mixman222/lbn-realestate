@@ -470,6 +470,17 @@ def invest_panel():
     </div>""", unsafe_allow_html=True)
 
 
+def _loc_typed():
+    """عند تحرير خانة المنطقة يدوياً نلغي أي اختيار سابق من القائمة"""
+    st.session_state.pop('picked_loc', None)
+
+
+def _pick_location(labels_map):
+    """حفظ المنطقة المختارة من القائمة المنسدلة (لا يكتب مباشرة في خانة النص)"""
+    picked = st.session_state.sug_box
+    if picked and picked in labels_map:
+        st.session_state.picked_loc = labels_map[picked]
+
 def post_panel():
     """لوحة البائع/المالك: اختيار نوع العرض + النشر بثلاث خطوات + إعلانات المستخدمين"""
     st.markdown('<div class="section-title">📤 انشر عقارك — يصل مباشرة لآلاف الزوار</div>',
@@ -497,34 +508,35 @@ def post_panel():
                                       "طرابلس", "صيدا", "صور", "النبطية", "عكار", "البترون", "زحلة", "غير ذلك"])
         st.markdown('<div class="field-hint">💡 القضاء يظهر في <b>مخططات الأسعار</b> بالموقع — اختاره بدقة.</div>',
                     unsafe_allow_html=True)
-        loc = st.text_input("المنطقة / الحي — اكتب أول حرفين وسنقترح عليك", key="loc_input")
+        loc = st.text_input("المنطقة / الحي — اكتب أول حرفين وسنقترح عليك", key="loc_input",
+                            on_change=_loc_typed)
         st.markdown('<div class="field-hint">💡 <b>ابدأ بالكتابة مباشرة</b> — الاقتراحات تظهر تحت الخانة فوراً'
                     ' بالإنجليزية أو العربية (Achrafieh أو الأشرفية، Hammana أو حمانا…)'
                     ' أو أكمل كتابة منطقتك بنفسك.</div>', unsafe_allow_html=True)
         q = loc.strip()
         if len(q) >= 2:
-            suggestions = loc_suggestions(q)
-            if suggestions:
-                st.markdown("**اقتراحات:**")
-                for i in range(0, len(suggestions), 2):
-                    cols = st.columns(2)
-                    for j in range(2):
-                        if i + j < len(suggestions):
-                            en, ar = suggestions[i + j]
-                            label = f"{en} {ar}" if ar else en
-                            if cols[j].button(label, key=f"sug-{i}-{j}",
-                                              use_container_width=True):
-                                st.session_state.loc_input = en
-                                st.rerun()
+            sug = loc_suggestions(q)
+            if sug:
+                labels_map = {f"{ar} ({en})".strip() if ar else en: en
+                              for en, ar in sug}
+                placeholder = "— اختر منطقة —"
+                st.selectbox("⬇️ اقتراحات المناطق — اختر من القائمة أو أكمل الكتابة",
+                             [placeholder] + list(labels_map), key="sug_box",
+                             on_change=_pick_location, args=(labels_map,))
         area = st.number_input("المساحة (م²)", min_value=0, value=0, step=10)
-        st.markdown('<div class="field-hint">💡 المساحة الكلية بالمتر² — أساس حساب <b>سعر المتر</b> الذي يقارنه الجميع.</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="field-hint">💡 المساحة الكلية بالمتر² — أساس حساب <b>سعر المتر</b>'
+                    ' الذي يقارنه الجميع.</div>', unsafe_allow_html=True)
+        picked_loc = st.session_state.get('picked_loc')
+        if picked_loc:
+            st.markdown(f'<div class="field-hint">📍 سيُنشر في: <b>{picked_loc}</b> ✔'
+                        ' — عدّل الخانة أعلاه إن أردت غيره.</div>', unsafe_allow_html=True)
+        loc_final = picked_loc or loc.strip()
         if st.button("التالي ←"):
-            if not loc.strip() or area <= 0:
-                st.warning("اكتب المنطقة وأدخل المساحة.")
+            if not loc_final or area <= 0:
+                st.warning("اختر المنطقة وأدخل المساحة.")
             else:
                 st.session_state.ad_data.update({'prop_type': pt, 'governorate': gov,
-                                                 'location': loc.strip(), 'area': area,
+                                                 'location': loc_final, 'area': area,
                                                  'deal_type': deal_type})
                 st.session_state.ad_step = 2
                 st.rerun()
