@@ -324,29 +324,35 @@ def _add_cloud(data, image_b64):
     if not url or not key:
         return None
     row = {**data, 'image_b64': image_b64}
-    r = requests.post(f"{url}/rest/v1/user_ads",
-                      headers={**_write_headers(), "Prefer": "return=representation"},
-                      json=row, timeout=20)
-    if r.status_code in (200, 201):
-        d = r.json()
-        return d[0]['id'] if isinstance(d, list) and d else None
+    try:
+        r = requests.post(f"{url}/rest/v1/user_ads",
+                          headers={**_write_headers(), "Prefer": "return=representation"},
+                          json=row, timeout=20)
+        if r.status_code in (200, 201):
+            d = r.json()
+            return d[0]['id'] if isinstance(d, list) and d else None
+    except Exception:
+        pass
     return None
 
 def _load_cloud():
     url, key = _cloud()
     if not url or not key:
         return None
-    r = requests.get(f"{url}/rest/v1/user_ads?select=*&order=id.desc",
-                     headers=_headers(), timeout=20)
-    if r.status_code != 200:
+    try:
+        r = requests.get(f"{url}/rest/v1/user_ads?select=*&order=id.desc",
+                         headers=_headers(), timeout=20)
+        if r.status_code != 200:
+            return None
+        df = pd.DataFrame(r.json())
+        if df.empty:
+            df = pd.DataFrame(columns=['id', 'prop_type', 'governorate', 'location', 'floor',
+                                       'rooms', 'area', 'price_lbp', 'furnished', 'parking',
+                                       'description', 'name', 'phone', 'image_b64',
+                                       'created_at', 'status', 'deal_type'])
+        return df
+    except Exception:
         return None
-    df = pd.DataFrame(r.json())
-    if df.empty:
-        df = pd.DataFrame(columns=['id', 'prop_type', 'governorate', 'location', 'floor',
-                                   'rooms', 'area', 'price_lbp', 'furnished', 'parking',
-                                   'description', 'name', 'phone', 'image_b64',
-                                   'created_at', 'status', 'deal_type'])
-    return df
 
 # ---------- الواجهة العامة ----------
 def add_ad(data, image_bytes=None, image_ext=None, user_id=None):
