@@ -20,8 +20,9 @@ def esc(v):
 
 try:
     from streamlit_searchbox import st_searchbox
-    HAS_SEARCHBOX = True
+    HAS_SEARCHBOX = os.environ.get("USE_SEARCHBOX", "0") == "1"
 except Exception:
+    st_searchbox = None
     HAS_SEARCHBOX = False
 
 @st.cache_data(ttl=3600)
@@ -567,7 +568,7 @@ def post_panel():
             st.subheader("✨ حساب جديد")
             rname = st.text_input("اسمك", key="reg_name")
             rphone = st.text_input("رقم الهاتف", key="reg_phone", placeholder="70 123 456")
-            rpass = st.text_input("كلمة السر (٤ أحرف على الأقل)", type="password", key="reg_pass")
+            rpass = st.text_input("كلمة السر (٦ أحرف على الأقل)", type="password", key="reg_pass")
             if st.button("إنشاء الحساب", use_container_width=True):
                 u, err = user_ads.register(rname, rphone, rpass)
                 if err:
