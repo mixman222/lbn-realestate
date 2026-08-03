@@ -355,6 +355,47 @@ def _load_cloud():
         return None
 
 # ---------- الواجهة العامة ----------
+PUBLISH_DAILY_MAX = 5
+
+def _publish_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS publish_log (
+            user_id INTEGER NOT NULL,
+            day     TEXT NOT NULL,
+            at      TEXT
+        )
+    """)
+    conn.commit()
+    return conn
+
+def count_published_today(user_id):
+    """كم إعلاناً نشر المستخدم اليوم — للحد من الإغراق (يرجع 0 عند أي تعذر)"""
+    try:
+        today = datetime.today().strftime('%Y-%m-%d')
+        conn = _publish_db()
+        n = conn.execute("SELECT COUNT(*) FROM publish_log WHERE user_id=? AND day=?",
+                         (int(user_id), today)).fetchone()[0]
+        conn.close()
+        return n
+    except Exception:
+        return 0
+
+def log_publish(user_id):
+    """تسجيل إعلان جديد مقابل المستخدم"""
+    try:
+        conn = _publish_db()
+        conn.execute("INSERT INTO publish_log (user_id, day, at) VALUES (?, ?, ?)",
+                     (int(user_id), datetime.today().strftime('%Y-%m-%d'),
+                      datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def can_publish(user_id):
+    return count_published_today(user_id) < PUBLISH_DAILY_MAX
+
 def add_ad(data, image_bytes=None, image_ext=None, user_id=None):
     """يضيف إعلان — سحابي، ومحلي احتياط. يرجع id"""
     image_b64 = None

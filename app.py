@@ -326,7 +326,7 @@ if "role" not in st.session_state:
 c_roles, c_post = st.columns([2, 1], vertical_alignment="center")
 with c_roles:
     idx = ROLE_LABELS.index(st.session_state.role) if st.session_state.role in ROLE_LABELS else None
-    sel = st.radio("", ROLE_LABELS, index=idx, label_visibility="collapsed",
+    sel = st.radio("أقسام الموقع", ROLE_LABELS, index=idx, label_visibility="collapsed",
                    key="role_browse" if st.session_state.role != "post" else "role_browse_post")
     if sel is not None and sel != st.session_state.role:
         st.session_state.role = sel
@@ -607,7 +607,8 @@ def post_panel():
 
     if "session_user" not in st.session_state:
         st.caption("النشر بحساب بسيط (اسم + هاتف + كلمة سر) — دقيقة واحدة، وتستطيع تعديل إعلاناتك وحذفها متى شئت.")
-        auth_mode = st.radio("", ["تسجيل الدخول", "حساب جديد"], horizontal=True, key="auth_mode")
+        auth_mode = st.radio("طريقة الدخول", ["تسجيل الدخول", "حساب جديد"],
+                             horizontal=True, label_visibility="collapsed", key="auth_mode")
         if auth_mode == "حساب جديد":
             st.subheader("✨ حساب جديد")
             rname = st.text_input("اسمك", key="reg_name")
@@ -762,6 +763,8 @@ def post_panel():
             if st.button("🚀 نشر الإعلان"):
                 if not name.strip() or not phone.strip():
                     st.warning("أدخل اسمك ورقم هاتفك.")
+                elif not user_ads.can_publish(u['id']):
+                    st.warning("وصلت للحد الأقصى للنشر اليوم (5 إعلانات) — جرب غداً.")
                 else:
                     ad = {**st.session_state.ad_data,
                           'description': desc.strip(), 'name': name.strip(), 'phone': phone.strip()}
@@ -769,6 +772,7 @@ def post_panel():
                                             img.getvalue() if img else None,
                                             img.name.split('.')[-1] if img else None,
                                             user_id=u['id'])
+                    user_ads.log_publish(u['id'])
                     st.session_state.flash_msg = (f"تم نشر إعلانك (#{ad_id}) — يظهر الآن "
                                                   "في قسم إعلانات المستخدمين وإعلاناتي.")
                     st.session_state.ad_step = 1
