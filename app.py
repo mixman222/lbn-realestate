@@ -4,6 +4,8 @@
 بيانات يومية من السوق المفتوح + إعلانات المستخدمين.
 """
 import os, sys, sqlite3, base64, html
+import requests, uuid
+from datetime import date
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -24,6 +26,48 @@ try:
 except Exception:
     st_searchbox = None
     HAS_SEARCHBOX = False
+
+def _supabase():
+    try:
+        return st.secrets.get("SUPABASE_URL", ""), st.secrets.get("SUPABASE_ANON_KEY", "")
+    except Exception:
+        return "", ""
+
+def _log_visit():
+    """يسجل زيارة فريدة (جلسة واحدة/يوم) في Supabase — صامت تماماً، لا يوقف التطبيق أبداً"""
+    try:
+        today = date.today().isoformat()
+        if st.session_state.get('_visit_logged') == today:
+            return
+        url, key = _supabase()
+        if not url or not key:
+            return
+        if 'session_id' not in st.session_state:
+            st.session_state.session_id = uuid.uuid4().hex
+        requests.post(f"{url}/rest/v1/site_visits",
+                      headers={"apikey": key, "Authorization": "Bearer " + key,
+                               "Content-Type": "application/json"},
+                      json={"session_id": st.session_state.session_id, "visit_date": today},
+                      timeout=8)
+        st.session_state['_visit_logged'] = today
+    except Exception:
+        pass
+
+def _visitors_today():
+    """زوار اليوم الفريدون (حسب جلسة المتصفح) — أو None عند التعذر"""
+    try:
+        url, key = _supabase()
+        if not url or not key:
+            return None
+        r = requests.get(f"{url}/rest/v1/site_visits",
+                         params={"select": "session_id", "visit_date": "eq." + date.today().isoformat()},
+                         headers={"apikey": key, "Authorization": "Bearer " + key},
+                         timeout=8)
+        if r.status_code == 200:
+            return len({x.get("session_id") for x in r.json()})
+    except Exception:
+        pass
+    return None
 
 @st.cache_data(ttl=3600)
 def known_locations():
@@ -841,7 +885,8 @@ elif role == "📈 استثمار":
 else:
     post_panel()
 
-# ---------- التذييل: الاشتراك + تنويه ----------
+# ---------- التذييل: الاشتراك + تنويه + عداد الزوار ----------
+_log_visit()
 st.markdown("---")
 with st.expander("📧 التقرير الأسبوعي المجاني — متوسطات الأسعار وأبرز العروض كل جمعة"):
     st.caption("بدون رسائل مزعجة — تقرير واحد أسبوعياً، تنسحب وقت ما بدك.")
@@ -877,3 +922,8 @@ with st.expander("📧 التقرير الأسبوعي المجاني — متو
 st.markdown(f'<div class="foot">⚠️ الأسعار بالدولار الأمريكي (محوّلة بسعر {LBP_RATE:,.0f} ل.ل/$) كما يعلنها البائعون على السوق المفتوح — للتوجيه فقط وليست تقييماً مهنياً. '
             'الأرقام الهاتفية مقنّعة؛ الرقم الكامل من صفحة الإعلان الرسمية. '
             '<br>عقار لبنان — منصة مستقلة لمتابعة سوق العقارات اللبناني. 🇱🇧</div>', unsafe_allow_html=True)
+
+_visitors = _visitors_today()
+if _visitors is not None:
+    st.markdown(f'<div class="foot" style="text-align:center;padding-top:6px">👥 زوار اليوم: {_visitors}</div>',
+                unsafe_allow_html=True)

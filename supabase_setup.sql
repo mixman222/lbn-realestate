@@ -57,3 +57,19 @@ CREATE POLICY "public_delete_user_ads" ON public.user_ads
 DROP POLICY IF EXISTS "no_public_users_read" ON public.users;
 CREATE POLICY "no_public_users_read" ON public.users
   FOR SELECT TO anon, authenticated USING (false);
+
+-- 8) عداد الزوار: جدول + سياسات (الجمهور: إدراج وقراءة فقط — لا تعديل ولا حذف)
+CREATE TABLE IF NOT EXISTS public.site_visits (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  session_id text NOT NULL,
+  visit_date date NOT NULL DEFAULT CURRENT_DATE,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.site_visits ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "public_site_visits_insert" ON public.site_visits;
+CREATE POLICY "public_site_visits_insert" ON public.site_visits
+  FOR INSERT TO anon, authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "public_site_visits_select" ON public.site_visits;
+CREATE POLICY "public_site_visits_select" ON public.site_visits
+  FOR SELECT TO anon, authenticated USING (true);
