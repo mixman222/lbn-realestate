@@ -88,8 +88,6 @@ def extract_fields(hit, purpose):
         price_usd = None
     if not price_usd:
         return None
-
-    # فترة السعر: إيجار سياحي بالليلة، وبعض الشاليهات سنوياً/أسبوعياً
     period = 'month'
     if extra.get('accommodation_type') is not None:
         period = 'night'
@@ -107,6 +105,10 @@ def extract_fields(hit, purpose):
         area = float(extra.get('ft') or 0) or None
     except (TypeError, ValueError):
         area = None
+
+    # قنينة الشواذ عند المصدر: سعر/م² فوق 30000$ يشير لخطأ في حقل السعر (مثال: شقة 114م² بـ153.9M$)
+    if area and area > 0 and price_usd / area > 30000:
+        return None
 
     rooms = None
     for k in ('bedrooms', 'beds', 'bedroom'):

@@ -9,6 +9,9 @@ import pandas as pd
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "realestate.db")
 
+# سعر الصرف الرسمي الموحد — يُعدّل من البيئة إذا تغيّر (LBP_TO_USD)
+LBP_RATE = float(os.environ.get("LBP_TO_USD", "15000"))
+
 # توحيد أسماء المدن -> الاسم العربي (المفاتيح كما يرسلها السوق المفتوح)
 CITY_AR = {
     "beirut": "بيروت", "tripoli": "طرابلس", "sidon": "صيدا", "zahle": "زحلة",
@@ -47,7 +50,7 @@ def load_listings():
     conn.close()
     return df
 
-def normalize(df, lbp_rate=15000.0):
+def normalize(df, lbp_rate=LBP_RATE):
     if df.empty:
         return df
     df = df.copy()

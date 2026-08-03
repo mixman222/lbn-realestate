@@ -4,7 +4,7 @@
 - load_ads: جلب الإعلانات (سحابي أولاً)
 - الصورة تُخزن base64 داخل القاعدة (ينتقل لـ Storage لاحقاً)
 """
-import os, sqlite3, base64, hashlib, secrets, time
+import os, sqlite3, base64, hashlib, hmac, secrets, time, re
 from datetime import datetime
 from functools import lru_cache
 import requests
@@ -32,8 +32,16 @@ def _secret(name):
 def _cloud():
     return _secret("SUPABASE_URL"), _secret("SUPABASE_ANON_KEY")
 
+def _write_key():
+    """مفتاح الكتابة: service key (سري، من st.secrets فقط) إن وُجد، وإلا anon"""
+    return _secret("SUPABASE_SERVICE_KEY") or _secret("SUPABASE_ANON_KEY")
+
 def _headers():
     return {"apikey": _cloud()[1], "Authorization": "Bearer " + _cloud()[1],
+            "Content-Type": "application/json"}
+
+def _write_headers():
+    return {"apikey": _write_key(), "Authorization": "Bearer " + _write_key(),
             "Content-Type": "application/json"}
 
 # ---------- محلي (احتياط) ----------
@@ -156,8 +164,26 @@ def _cloud_table_exists(table):
     except Exception:
         return False
 
+PBKDF2_ITER = 200_000
+
 def _hash_pw(password, salt):
+    """تجزئة PBKDF2-HMAC-SHA256 (مكتبة قياسية، مقاومة لكسر سريع) — تُخزَّن بالصيغة pbkdf2$n$salt$hash"""
+    return f"pbkdf2${PBKDF2_ITER}${salt}${hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), PBKDF2_ITER).hex()}"
+
+def _legacy_hash_pw(password, salt):
+    """التجزئة القديمة SHA256(salt+password) — تُقبل فقط للترحيل عند الدخول"""
     return hashlib.sha256((salt + password).encode('utf-8')).hexdigest()
+
+def _verify_pw(password, stored, salt=""):
+    """تحقق من كلمة السر — يدعم الصيغة الجديدة (pbkdf2) والقديمة (sha256) للترحيل"""
+    if stored.startswith('pbkdf2$'):
+        try:
+            _, n, s, h = stored.split('$', 3)
+            calc = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), s.encode('utf-8'), int(n)).hex()
+            return hmac.compare_digest(calc, h)
+        except Exception:
+            return False
+    return hmac.compare_digest(_legacy_hash_pw(password, salt or ""), stored)
 
 def _register_local(name, phone, salt, pw_hash):
     _init_local()
@@ -178,7 +204,7 @@ def _register_cloud(name, phone, salt, pw_hash):
     url, key = _cloud()
     try:
         r = requests.post(f"{url}/rest/v1/users",
-                          headers={**_headers(), "Prefer": "return=representation"},
+                          headers={**_write_headers(), "Prefer": "return=representation"},
                           json={'name': name, 'phone': phone, 'salt': salt,
                                 'pw_hash': pw_hash}, timeout=20)
         if r.status_code in (200, 201):
@@ -195,8 +221,8 @@ def register(name, phone, password):
     name, phone = (name or '').strip(), (phone or '').strip()
     if not name or not phone or len(phone) < 7:
         return None, 'أدخل اسمك ورقم هاتف صحيح'
-    if not password or len(password) < 4:
-        return None, 'كلمة السر ٤ أحرف على الأقل'
+    if not password or len(password) < 6:
+        return None, 'كلمة السر ٦ أحرف على الأقل'
     salt = secrets.token_hex(8)
     pw_hash = _hash_pw(password, salt)
     if _cloud_table_exists('users'):
@@ -214,9 +240,15 @@ def _login_local(phone, password):
     _init_local()
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute("SELECT * FROM users WHERE phone=?", (phone,)).fetchone()
-    conn.close()
-    if row and _hash_pw(password, row[3]) == row[4]:
+    if row and _verify_pw(password, row[4], row[3]):
+        if not row[4].startswith('pbkdf2$'):
+            # ترحيل: تجزئة قديمة → PBKDF2 على نجاح الدخول
+            conn.execute("UPDATE users SET salt=?, pw_hash=? WHERE id=?",
+                         (row[3], _hash_pw(password, row[3]), row[0]))
+            conn.commit()
+        conn.close()
         return {'id': row[0], 'name': row[1], 'phone': row[2]}
+    conn.close()
     return None
 
 def _login_cloud(phone, password):
@@ -225,27 +257,66 @@ def _login_cloud(phone, password):
         r = requests.get(f"{url}/rest/v1/users",
                          params={'phone': f"eq.{phone}",
                                  'select': 'id,name,phone,salt,pw_hash'},
-                         headers=_headers(), timeout=20)
+                         headers=_write_headers(), timeout=20)
         if r.status_code == 200:
             rows = r.json()
             if rows:
                 u = rows[0]
-                if _hash_pw(password, u.get('salt', '')) == u.get('pw_hash'):
+                if _verify_pw(password, u.get('pw_hash', ''), u.get('salt', '')):
+                    if not (u.get('pw_hash') or '').startswith('pbkdf2$'):
+                        # ترحيل التجزئة القديمة في السحابة عبر PATCH
+                        nsalt = secrets.token_hex(8)
+                        try:
+                            requests.patch(f"{url}/rest/v1/users",
+                                           params={'id': f"eq.{u['id']}"},
+                                           headers={**_write_headers(), "Prefer": "return=minimal"},
+                                           json={'salt': nsalt, 'pw_hash': _hash_pw(password, nsalt)},
+                                           timeout=20)
+                        except Exception:
+                            pass
                     return {'id': u['id'], 'name': u['name'], 'phone': u['phone']}
         return None
     except Exception:
         return None
+
+# حماية الدخول: 5 محاولات فاشلة = قفل 10 دقائق (لكل رقم، في ذاكرة المثيل)
+_LOGIN_FAILS = {}
+_LOGIN_MAX = 5
+_LOGIN_WINDOW = 600
+
+def _login_blocked(phone):
+    f = _LOGIN_FAILS.get(phone)
+    if f and f[0] >= _LOGIN_MAX and time.time() - f[1] < _LOGIN_WINDOW:
+        return True
+    if f and f[0] >= _LOGIN_MAX:
+        del _LOGIN_FAILS[phone]
+    return False
+
+def _login_fail(phone):
+    f = _LOGIN_FAILS.get(phone)
+    _LOGIN_FAILS[phone] = (1 if not f else f[0] + 1, time.time() if not f else f[1])
+
+def _login_ok(phone):
+    _LOGIN_FAILS.pop(phone, None)
 
 def login(phone, password):
     """تسجيل الدخول — يرجع user أو None"""
     phone = (phone or '').strip()
     if not phone or not password:
         return None
+    if _login_blocked(phone):
+        return None
     if _cloud_table_exists('users'):
         u = _login_cloud(phone, password)
         if u:
+            _login_ok(phone)
             return u
-    return _login_local(phone, password)
+    u = _login_local(phone, password)
+    if u:
+        _login_ok(phone)
+        return u
+    _login_fail(phone)
+    return None
 
 # ---------- سحابي ----------
 def _add_cloud(data, image_b64):
@@ -254,7 +325,7 @@ def _add_cloud(data, image_b64):
         return None
     row = {**data, 'image_b64': image_b64}
     r = requests.post(f"{url}/rest/v1/user_ads",
-                      headers={**_headers(), "Prefer": "return=representation"},
+                      headers={**_write_headers(), "Prefer": "return=representation"},
                       json=row, timeout=20)
     if r.status_code in (200, 201):
         d = r.json()
@@ -337,7 +408,7 @@ def update_ad(ad_id, user_id, fields):
             try:
                 r = requests.patch(f"{url}/rest/v1/user_ads",
                                    params={'id': f"eq.{ad_id}"},
-                                   headers={**_headers(), "Prefer": "return=minimal"},
+                                   headers={**_write_headers(), "Prefer": "return=minimal"},
                                    json={k: v for k, v in fields.items()
                                          if k in ('price_lbp', 'description')},
                                    timeout=20)
@@ -359,7 +430,7 @@ def delete_ad(ad_id, user_id):
             try:
                 r = requests.delete(f"{url}/rest/v1/user_ads",
                                     params={'id': f"eq.{ad_id}"},
-                                    headers=_headers(), timeout=20)
+                                    headers=_write_headers(), timeout=20)
                 if r.status_code in (200, 204):
                     return True
             except Exception:

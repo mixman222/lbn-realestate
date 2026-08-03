@@ -2,3 +2,8 @@
 __pycache__/
 .DS_Store
 .env
+
+# بيانات المستخدمين المحلية (هواتف + كلمات سر) — لا تُرفع أبداً
+user_ads.db
+user_ads_images/
+subscribers.db

@@ -3,14 +3,20 @@
 مسارات واضحة: شراء / إيجار / استثمار / نشر عقارك
 بيانات يومية من السوق المفتوح + إعلانات المستخدمين.
 """
-import os, sys, sqlite3, base64
+import os, sys, sqlite3, base64, html
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from normalize import load_listings, normalize
+from normalize import load_listings, normalize, LBP_RATE
+
+def esc(v):
+    """تعقيم أي نص قبل وضعه في HTML — يمنع حقن السكربتات من الإعلانات وبيانات المستخدمين"""
+    if pd.isna(v):
+        return ""
+    return html.escape(str(v), quote=True)
 
 try:
     from streamlit_searchbox import st_searchbox
@@ -373,7 +379,7 @@ def market_panel(dd, is_rent):
     for _, r in f.head(30).iterrows():
         loc = (f"{r['location']}، {r['city_ar']}" if pd.notna(r['location'])
                and str(r['location']).strip() else r['city_ar'])
-        tags = [r['prop_type'] or '', f"{r['area']:.0f} م²" if pd.notna(r['area']) else '']
+        tags = [esc(r['prop_type']), f"{r['area']:.0f} م²" if pd.notna(r['area']) else '']
         if pd.notna(r['rooms']):
             tags.append(f"{r['rooms']:.0f} غرف")
         tags = [t for t in tags if t]
@@ -401,22 +407,22 @@ def market_panel(dd, is_rent):
                     except Exception:
                         pass
             with col_txt:
-                st.markdown(f"**{r['title']}**")
-                st.markdown(f"📍 {loc} &nbsp;·&nbsp; {tags_html}"
-                            f"<span class='tag' style='background:#eef2ff;color:#4338ca;'>{src_label}</span>",
+                st.markdown(f"**{esc(r['title'])}**")
+                st.markdown(f"📍 {esc(loc)} &nbsp;·&nbsp; {tags_html}"
+                            f"<span class='tag' style='background:#eef2ff;color:#4338ca;'>{esc(src_label)}</span>",
                             unsafe_allow_html=True)
                 if desc:
-                    st.markdown(f'<div class="muted">{desc}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="muted">{esc(desc)}</div>', unsafe_allow_html=True)
                 info = []
                 if seller:
-                    info.append(f"👤 {seller}")
+                    info.append(f"👤 {esc(seller)}")
                 if phone:
-                    info.append(f'<span class="phone-chip">📞 {phone}</span>')
+                    info.append(f'<span class="phone-chip">📞 {esc(phone)}</span>')
                 if pd.notna(r['date_posted']):
                     info.append(f"🗓 {r['date_posted'].strftime('%d/%m/%Y')}")
                 st.markdown(" &nbsp; ".join(info), unsafe_allow_html=True)
                 if has_link:
-                    st.markdown(f'<a class="cta-btn" href="{link_url}" target="_blank">عرض الإعلان كاملاً</a>',
+                    st.markdown(f'<a class="cta-btn" href="{esc(link_url)}" target="_blank">عرض الإعلان كاملاً</a>',
                                 unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="muted" style="font-size:0.8rem">'
@@ -506,7 +512,7 @@ def invest_panel():
     st.markdown('<div class="section-title">💎 أفضل الصفقات (أدنى سعر للمتر²)</div>', unsafe_allow_html=True)
     cheap = sale.nsmallest(6, 'price_per_m2')
     rows = "".join(
-        f"<tr><td>{r['title'][:55]}</td><td>{r['governorate']}</td>"
+        f"<tr><td>{esc(r['title'][:55])}</td><td>{esc(r['governorate'])}</td>"
         f"<td>{fmt_usd(r['price_per_m2'])}/م²</td><td>{fmt_usd(r['price_usd'])}</td></tr>"
         for _, r in cheap.iterrows())
     st.markdown(f"""
@@ -526,7 +532,7 @@ def invest_panel():
     st.markdown('<div class="section-title">🏙️ الأغلى ثمناً (متوسط سعر المتر²)</div>', unsafe_allow_html=True)
     top5 = (sale.groupby('governorate').agg(متوسط=('price_per_m2', 'median'))
                 .reset_index().sort_values('متوسط', ascending=False).head(5))
-    t5 = "".join(f"<tr><td>{r['governorate']}</td><td>{fmt_usd(r['متوسط'])}</td></tr>"
+    t5 = "".join(f"<tr><td>{esc(r['governorate'])}</td><td>{fmt_usd(r['متوسط'])}</td></tr>"
                  for _, r in top5.iterrows())
     st.markdown(f"""
     <div style="overflow-x:auto;">
@@ -682,7 +688,7 @@ def post_panel():
                 if price <= 0:
                     st.warning("أدخل السعر.")
                 else:
-                    st.session_state.ad_data.update({'price_lbp': price * 15000, 'rooms': rooms,
+                    st.session_state.ad_data.update({'price_lbp': price * LBP_RATE, 'rooms': rooms,
                                                      'floor': floor.strip() or 'غير محدد',
                                                      'furnished': furnished, 'parking': parking})
                     st.session_state.ad_step = 3
@@ -735,7 +741,7 @@ def post_panel():
         for _, row in mine.iterrows():
             with st.expander(f"#{row['id']} — {row['prop_type']} في {row['location']}"
                              f" ({row.get('deal_type') or 'للبيع'})"):
-                price_val = int(row['price_lbp'] / 15000) if row.get('price_lbp') else 0
+                price_val = int(row['price_lbp'] / LBP_RATE) if row.get('price_lbp') else 0
                 new_price = st.number_input("السعر ($)", min_value=0, value=price_val,
                                             step=10_000, key=f"ep_{row['id']}_{row.get('_src', '')}")
                 new_desc = st.text_area("الوصف", value=row.get('description') or '',
@@ -745,7 +751,7 @@ def post_panel():
                     if st.button("💾 حفظ التعديلات", key=f"eu_{row['id']}_{row.get('_src', '')}",
                                  use_container_width=True):
                         ok = user_ads.update_ad(str(row['id']), u['id'],
-                                                {'price_lbp': new_price * 15000,
+                                                {'price_lbp': new_price * LBP_RATE,
                                                  'description': new_desc})
                         if ok:
                             st.session_state.flash_msg = "تم حفظ التعديلات."
@@ -803,21 +809,22 @@ def post_panel():
                         is_rent_ad = str(r['deal_type']).strip() == "للإيجار"
                         tag_cls = "tag tag-rent" if is_rent_ad else "tag tag-sale"
                         price_extra = " شهرياً" if is_rent_ad else ""
-                        st.markdown(f"**{r['prop_type']} — {r['location']}، {r['governorate']}** "
-                                    f"<span class='{tag_cls}'>🔑 للإيجار</span>" if is_rent_ad
-                                    else f"**{r['prop_type']} — {r['location']}، {r['governorate']}** "
-                                    f"<span class='{tag_cls}'>🏷️ للبيع</span>", unsafe_allow_html=True)
+                        title_html = (f"**{esc(r['prop_type'])} — {esc(r['location'])}، {esc(r['governorate'])}** "
+                                      f"<span class='{tag_cls}'>🔑 للإيجار</span>" if is_rent_ad
+                                      else f"**{esc(r['prop_type'])} — {esc(r['location'])}، {esc(r['governorate'])}** "
+                                      f"<span class='{tag_cls}'>🏷️ للبيع</span>")
+                        st.markdown(title_html, unsafe_allow_html=True)
                         details = [f"{r['area']:.0f} م²" if pd.notna(r['area']) and r['area'] > 0 else ""]
                         if pd.notna(r['rooms']) and r['rooms'] > 0:
                             details.append(f"{r['rooms']:.0f} غرف")
-                        details += [r['furnished'] or "", r['floor'] or ""]
+                        details += [esc(r['furnished'] or ""), esc(r['floor'] or "")]
                         st.markdown(" · ".join(d for d in details if d))
                         if pd.notna(r['description']) and str(r['description']).strip():
-                            st.markdown(f'<div class="muted">{r["description"]}</div>', unsafe_allow_html=True)
-                        st.markdown(f"👤 {r['name']} &nbsp;·&nbsp; <span class='phone-chip'>📞 {r['phone']}</span>",
+                            st.markdown(f'<div class="muted">{esc(r["description"])}</div>', unsafe_allow_html=True)
+                        st.markdown(f"👤 {esc(r['name'])} &nbsp;·&nbsp; <span class='phone-chip'>📞 {esc(r['phone'])}</span>",
                                     unsafe_allow_html=True)
                     with cp:
-                        st.markdown(f'<div class="price-big">{fmt_usd(r["price_lbp"] / 15000)}{price_extra}</div>',
+                        st.markdown(f'<div class="price-big">{fmt_usd(r["price_lbp"] / LBP_RATE)}{price_extra}</div>',
                                     unsafe_allow_html=True)
     except Exception:
         st.info("خدمة الإعلانات غير متاحة حالياً — حاول لاحقاً.")
@@ -866,6 +873,6 @@ with st.expander("📧 التقرير الأسبوعي المجاني — متو
         else:
             st.error("يرجى إدخال بريد إلكتروني صحيح.")
 
-st.markdown('<div class="foot">⚠️ الأسعار بالدولار الأمريكي (محوّلة بسعر 15000 ل.ل/$) كما يعلنها البائعون على السوق المفتوح — للتوجيه فقط وليست تقييماً مهنياً. '
+st.markdown(f'<div class="foot">⚠️ الأسعار بالدولار الأمريكي (محوّلة بسعر {LBP_RATE:,.0f} ل.ل/$) كما يعلنها البائعون على السوق المفتوح — للتوجيه فقط وليست تقييماً مهنياً. '
             'الأرقام الهاتفية مقنّعة؛ الرقم الكامل من صفحة الإعلان الرسمية. '
             '<br>عقار لبنان — منصة مستقلة لمتابعة سوق العقارات اللبناني. 🇱🇧</div>', unsafe_allow_html=True)

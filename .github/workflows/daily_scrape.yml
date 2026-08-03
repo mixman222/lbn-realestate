@@ -54,8 +54,6 @@ jobs:
       - name: Send weekly report
         env:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          BREVO_SMTP_KEY: ${{ secrets.BREVO_SMTP_KEY }}
-          BREVO_SMTP_USER: ${{ secrets.BREVO_SMTP_USER }}
           BREVO_SENDER: ${{ secrets.BREVO_SENDER }}
           BREVO_LIST_ID: "3"
           FORCE_REPORT: ${{ inputs.force_report == true && '1' || '0' }}
