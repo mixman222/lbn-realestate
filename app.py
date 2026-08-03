@@ -923,7 +923,13 @@ st.markdown(f'<div class="foot">⚠️ الأسعار بالدولار الأم�
             'الأرقام الهاتفية مقنّعة؛ الرقم الكامل من صفحة الإعلان الرسمية. '
             '<br>عقار لبنان — منصة مستقلة لمتابعة سوق العقارات اللبناني. 🇱🇧</div>', unsafe_allow_html=True)
 
-_visitors = _visitors_today()
-if _visitors is not None:
-    st.markdown(f'<div class="foot" style="text-align:center;padding-top:6px">👥 زوار اليوم: {_visitors}</div>',
-                unsafe_allow_html=True)
+try:
+    _owner_phone = st.secrets.get("OWNER_PHONE", "").replace(" ", "").replace("+961", "")
+    _u = st.session_state.get("session_user", {})
+    if _owner_phone and _u and str(_u.get("phone", "")).replace(" ", "").replace("+961", "") == _owner_phone:
+        _v = _visitors_today()
+        if _v is not None:
+            st.markdown(f'<div class="foot" style="text-align:center;padding-top:6px">👥 زوار اليوم: {_v}'
+                        '</div>', unsafe_allow_html=True)
+except Exception:
+    pass
